@@ -2,7 +2,7 @@
 .env.example
 
 DEMARRAGE_RAPIDE.md
-INSTALLATION.md
+/INSTALLATION.md
 README.md
 README.md.orig
 STRUCTURE.txt
