@@ -1,6 +1,11 @@
+# vars
 .env
 .env.example
 
+# dependencies
+/node_modules
+
+# manuals
 DEMARRAGE_RAPIDE.md
 /INSTALLATION.md
 README.md
