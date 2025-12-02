@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Backend - Application de gestion d'adhésions Apiculture
 
 ## 🚀 Installation
@@ -307,3 +308,6 @@ En cas de problème, vérifier :
 
 **Version :** 1.0.0  
 **Dernière mise à jour :** Décembre 2024
+=======
+0
+>>>>>>> 000969eebd7ad870f3164b13e0a885b620cef2d9
