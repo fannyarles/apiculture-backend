@@ -40,6 +40,11 @@ app.use('/api/settings', require('./routes/settingsRoutes'));
 console.log('  ✅ /api/settings');
 app.use('/api/files', require('./routes/filesRoutes'));
 console.log('  ✅ /api/files');
+app.use('/api/actualites', require('./routes/blogRoutes'));
+console.log('  ✅ /api/actualites');
+
+// Servir les fichiers statiques pour les uploads
+app.use('/uploads', express.static('uploads'));
 
 // Route de test
 app.get('/', (req, res) => {

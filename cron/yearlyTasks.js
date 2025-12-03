@@ -1,5 +1,6 @@
 const cron = require('node-cron');
 const Parametre = require('../models/parametreModel');
+const Article = require('../models/articleModel');
 
 /**
  * Cron job qui s'exécute le 31 décembre à 23:59
@@ -98,11 +99,54 @@ const updateAnneeEnCoursCron = () => {
 };
 
 /**
+ * Cron job qui s'exécute toutes les minutes
+ * Publie automatiquement les articles programmés dont la date est atteinte
+ */
+const publishScheduledArticlesCron = () => {
+  // Cron expression: '* * * * *' = toutes les minutes
+  cron.schedule('* * * * *', async () => {
+    try {
+      const now = new Date();
+      console.log(`🔍 Cron: Vérification des articles programmés (${now.toLocaleString('fr-FR')})`);
+      
+      // Trouver les articles programmés dont la date de publication est passée
+      const articlesToPublish = await Article.find({
+        statut: 'programme',
+        datePublication: { $lte: now }
+      });
+
+      console.log(`📊 Articles programmés trouvés: ${articlesToPublish.length}`);
+
+      if (articlesToPublish.length > 0) {
+        console.log(`📰 Cron: ${articlesToPublish.length} article(s) à publier...`);
+
+        // Publier chaque article
+        for (const article of articlesToPublish) {
+          console.log(`   → Publication de "${article.titre}" (date: ${article.datePublication})`);
+          article.statut = 'publie';
+          await article.save();
+          console.log(`   ✅ Article publié: "${article.titre}"`);
+        }
+
+        console.log(`🎉 ${articlesToPublish.length} article(s) publié(s) automatiquement`);
+      }
+    } catch (error) {
+      console.error('❌ Erreur lors de la publication automatique des articles:', error);
+      console.error('   Détails:', error.message);
+      console.error('   Stack:', error.stack);
+    }
+  });
+
+  console.log('📅 Cron job configuré: Publication automatique des articles (toutes les minutes)');
+};
+
+/**
  * Initialiser tous les cron jobs
  */
 const initCronJobs = () => {
   initNouvelleAnneeCron();
   updateAnneeEnCoursCron();
+  publishScheduledArticlesCron();
   console.log('✅ Tous les cron jobs sont configurés');
 };
 
