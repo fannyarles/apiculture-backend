@@ -1,9 +1,17 @@
-# vars
+# Variables d'environnement
 .env
 .env.example
 
-# dependencies
+# Node modules
 /node_modules
+
+# Logs
+/logs
+*.log
+
+# Mac / IDE / OS
+.DS_Store
+.vscode/
 
 # manuals
 DEMARRAGE_RAPIDE.md
