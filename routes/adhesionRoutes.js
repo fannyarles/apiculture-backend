@@ -9,13 +9,14 @@ const {
   requestPayment,
   deleteAdhesion,
   getStats,
+  sendHelpRequest,
 } = require('../controllers/adhesionController');
 const { protect, admin } = require('../middleware/authMiddleware');
 
 // Routes utilisateur
 router.post('/', protect, createAdhesion);
-router.get('/my', protect, getMyAdhesions);
-router.get('/my-adhesions', protect, getMyAdhesions); // Alias pour compatibilité frontend
+router.get('/my-adhesions', protect, getMyAdhesions);
+router.get('/user', protect, getMyAdhesions); // Alias pour /my-adhesions
 
 // Route mixte : retourne les adhésions selon le rôle
 router.get('/', protect, async (req, res, next) => {
@@ -27,7 +28,9 @@ router.get('/', protect, async (req, res, next) => {
   }
 });
 
+// Routes avec paramètres - DOIVENT être après les routes spécifiques
 router.get('/:id', protect, getAdhesionById);
+router.post('/:id/demande-aide', protect, sendHelpRequest);
 
 // Routes admin
 router.put('/:id/status', protect, admin, updateAdhesionStatus);

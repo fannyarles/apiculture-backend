@@ -41,9 +41,24 @@ const userSchema = mongoose.Schema(
       enum: ['user', 'admin'],
       default: 'user',
     },
+    organisme: {
+      type: String,
+      enum: ['SAR', 'AMAIR'],
+      required: function() {
+        return this.role === 'admin';
+      },
+    },
     isActive: {
       type: Boolean,
       default: true,
+    },
+    resetPasswordToken: {
+      type: String,
+      required: false,
+    },
+    resetPasswordExpire: {
+      type: Date,
+      required: false,
     },
   },
   {
@@ -52,9 +67,9 @@ const userSchema = mongoose.Schema(
 );
 
 // Hasher le mot de passe avant sauvegarde
-userSchema.pre('save', async function (next) {
+userSchema.pre('save', async function () {
   if (!this.isModified('password')) {
-    next();
+    return;
   }
   const salt = await bcrypt.genSalt(10);
   this.password = await bcrypt.hash(this.password, salt);

@@ -1,6 +1,22 @@
 const jwt = require('jsonwebtoken');
 const asyncHandler = require('express-async-handler');
+const crypto = require('crypto');
+const nodemailer = require('nodemailer');
 const User = require('../models/userModel');
+
+// Configuration du transporteur SMTP pour les emails
+const transporter = nodemailer.createTransport({
+  host: process.env.SMTP_HOST,
+  port: process.env.SMTP_PORT,
+  secure: false,
+  auth: {
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASS,
+  },
+  tls: {
+    rejectUnauthorized: false
+  }
+});
 
 // Générer un token JWT
 const generateToken = (id) => {
@@ -89,6 +105,7 @@ const loginUser = asyncHandler(async (req, res) => {
       telephone: user.telephone,
       adresse: user.adresse,
       role: user.role,
+      organisme: user.organisme,
       token: generateToken(user._id),
     });
   } else {
@@ -114,6 +131,7 @@ const getUserProfile = asyncHandler(async (req, res) => {
       adresse: user.adresse,
       dateNaissance: user.dateNaissance,
       role: user.role,
+      organisme: user.organisme,
       isActive: user.isActive,
       // Ajouter personalInfo avec mapping pour compatibilité frontend
       personalInfo: {
@@ -232,6 +250,125 @@ const checkEmail = asyncHandler(async (req, res) => {
   res.json({ exists: !!userExists });
 });
 
+// @desc    Demander la réinitialisation du mot de passe
+// @route   POST /api/auth/forgot-password
+// @access  Public
+const forgotPassword = asyncHandler(async (req, res) => {
+  const { email } = req.body;
+
+  if (!email) {
+    res.status(400);
+    throw new Error('Veuillez fournir une adresse email');
+  }
+
+  const user = await User.findOne({ email });
+
+  if (!user) {
+    res.status(404);
+    throw new Error('Aucun utilisateur trouvé avec cet email');
+  }
+
+  // Générer un token de réinitialisation
+  const resetToken = crypto.randomBytes(32).toString('hex');
+  
+  // Hasher le token et le sauvegarder
+  user.resetPasswordToken = crypto
+    .createHash('sha256')
+    .update(resetToken)
+    .digest('hex');
+  
+  // Définir l'expiration à 1 heure
+  user.resetPasswordExpire = Date.now() + 3600000;
+  
+  try {
+    await user.save({ validateBeforeSave: false });
+  } catch (saveError) {
+    console.error('Erreur lors de la sauvegarde du token:', saveError);
+    res.status(500);
+    throw new Error('Erreur lors de la sauvegarde du token de réinitialisation');
+  }
+
+  // Créer l'URL de réinitialisation
+  const resetUrl = `${process.env.FRONTEND_URL}/reset-password/${resetToken}`;
+
+  // Message de l'email
+  const message = `
+    <h1>Réinitialisation de mot de passe</h1>
+    <p>Vous avez demandé la réinitialisation de votre mot de passe.</p>
+    <p>Cliquez sur le lien ci-dessous pour réinitialiser votre mot de passe :</p>
+    <a href="${resetUrl}" style="display: inline-block; padding: 10px 20px; background-color: #4F46E5; color: white; text-decoration: none; border-radius: 5px;">Réinitialiser mon mot de passe</a>
+    <p>Ce lien est valable pendant 1 heure.</p>
+    <p>Si vous n'avez pas demandé cette réinitialisation, ignorez cet email.</p>
+  `;
+
+  try {
+    await transporter.sendMail({
+      from: `"${process.env.PLATFORM_NAME}" ${process.env.SMTP_FROM_EMAIL}`,
+      to: user.email,
+      subject: 'Réinitialisation de mot de passe',
+      html: message,
+    });
+
+    res.json({ 
+      success: true,
+      message: 'Email de réinitialisation envoyé' 
+    });
+  } catch (error) {
+    console.error('Erreur lors de l\'envoi de l\'email:', error);
+    user.resetPasswordToken = undefined;
+    user.resetPasswordExpire = undefined;
+    await user.save({ validateBeforeSave: false });
+
+    res.status(500);
+    throw new Error('Erreur lors de l\'envoi de l\'email');
+  }
+});
+
+// @desc    Réinitialiser le mot de passe
+// @route   POST /api/auth/reset-password/:token
+// @access  Public
+const resetPassword = asyncHandler(async (req, res) => {
+  const { password } = req.body;
+
+  if (!password) {
+    res.status(400);
+    throw new Error('Veuillez fournir un nouveau mot de passe');
+  }
+
+  if (password.length < 6) {
+    res.status(400);
+    throw new Error('Le mot de passe doit contenir au moins 6 caractères');
+  }
+
+  // Hasher le token reçu pour le comparer
+  const resetPasswordToken = crypto
+    .createHash('sha256')
+    .update(req.params.token)
+    .digest('hex');
+
+  // Trouver l'utilisateur avec le token valide
+  const user = await User.findOne({
+    resetPasswordToken,
+    resetPasswordExpire: { $gt: Date.now() },
+  });
+
+  if (!user) {
+    res.status(400);
+    throw new Error('Token invalide ou expiré');
+  }
+
+  // Mettre à jour le mot de passe
+  user.password = password;
+  user.resetPasswordToken = undefined;
+  user.resetPasswordExpire = undefined;
+  await user.save();
+
+  res.json({ 
+    success: true,
+    message: 'Mot de passe réinitialisé avec succès' 
+  });
+});
+
 module.exports = {
   registerUser,
   loginUser,
@@ -241,4 +378,6 @@ module.exports = {
   getUsers,
   deleteUser,
   checkEmail,
+  forgotPassword,
+  resetPassword,
 };

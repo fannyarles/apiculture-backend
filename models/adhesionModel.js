@@ -19,23 +19,12 @@ const adhesionSchema = mongoose.Schema(
     // Informations apicoles
     napi: {
       type: String,
-      required: [true, 'Le numéro NAPI est requis'],
+      required: false, // Optionnel car peut être rempli plus tard
     },
     nombreRuches: {
       type: Number,
-      required: [true, 'Le nombre de ruches est requis'],
+      required: false, // Optionnel car peut être rempli plus tard
       min: 1,
-    },
-    typeApiculture: {
-      type: String,
-      enum: ['loisir', 'professionnel'],
-      required: true,
-    },
-    // Assurance
-    assurance: {
-      compagnie: { type: String, required: true },
-      numeroPolice: { type: String, required: true },
-      dateExpiration: { type: Date, required: true },
     },
     // Paiement
     paiement: {
@@ -45,8 +34,8 @@ const adhesionSchema = mongoose.Schema(
       },
       status: {
         type: String,
-        enum: ['en_attente', 'attente_paiement', 'paye', 'refuse'],
-        default: 'en_attente',
+        enum: ['non_demande', 'demande', 'paye', 'refuse'],
+        default: 'non_demande',
       },
       datePaiement: {
         type: Date,
@@ -61,7 +50,7 @@ const adhesionSchema = mongoose.Schema(
     // Statut de l'adhésion
     status: {
       type: String,
-      enum: ['en_attente', 'validee', 'actif', 'refuse', 'expiree'],
+      enum: ['en_attente', 'paiement_demande', 'actif', 'refuse', 'expiree'],
       default: 'en_attente',
     },
     // Notes admin

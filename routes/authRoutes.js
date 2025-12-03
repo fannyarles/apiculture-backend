@@ -9,6 +9,8 @@ const {
   getUsers,
   deleteUser,
   checkEmail,
+  forgotPassword,
+  resetPassword,
 } = require('../controllers/authController');
 const { protect, admin } = require('../middleware/authMiddleware');
 
@@ -16,6 +18,8 @@ const { protect, admin } = require('../middleware/authMiddleware');
 router.post('/register', registerUser);
 router.post('/login', loginUser);
 router.post('/check-email', checkEmail);
+router.post('/forgot-password', forgotPassword);
+router.post('/reset-password/:token', resetPassword);
 
 // Routes protégées (utilisateur connecté)
 router.get('/profile', protect, getUserProfile);

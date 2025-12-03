@@ -1,6 +1,7 @@
 const asyncHandler = require('express-async-handler');
 const Adhesion = require('../models/adhesionModel');
 const Parametre = require('../models/parametreModel');
+const User = require('../models/userModel');
 const nodemailer = require('nodemailer');
 
 // Configuration du transporteur SMTP
@@ -12,6 +13,9 @@ const transporter = nodemailer.createTransport({
     user: process.env.SMTP_USER,
     pass: process.env.SMTP_PASS,
   },
+  tls: {
+    rejectUnauthorized: false
+  }
 });
 
 // @desc    Créer une nouvelle adhésion
@@ -23,8 +27,6 @@ const createAdhesion = asyncHandler(async (req, res) => {
     annee,
     napi,
     nombreRuches,
-    typeApiculture,
-    assurance,
   } = req.body;
 
   // Vérifier si l'utilisateur a déjà une adhésion pour cette année et cet organisme
@@ -39,24 +41,39 @@ const createAdhesion = asyncHandler(async (req, res) => {
     throw new Error('Vous avez déjà une adhésion pour cet organisme cette année');
   }
 
-  // Récupérer les paramètres de l'année
-  const parametre = await Parametre.findOne({ annee, isActive: true });
+  // Récupérer les paramètres pour l'organisme et l'année
+  const parametre = await Parametre.findOne({ organisme, annee });
 
   if (!parametre) {
     res.status(400);
-    throw new Error('Aucun paramètre actif trouvé pour cette année');
+    throw new Error(`Paramètres non trouvés pour ${organisme} ${annee}`);
   }
 
-  // Calculer le montant
-  let montant;
+  // Vérifier que les adhésions sont ouvertes
+  if (!parametre.adhesionsOuvertes) {
+    res.status(400);
+    throw new Error(`Les adhésions pour ${organisme} ${annee} sont fermées`);
+  }
+
+  // Calculer le montant selon l'organisme
+  let montant = 0;
+  
   if (organisme === 'SAR') {
-    montant = typeApiculture === 'loisir' 
-      ? parametre.tarifsSAR.loisir 
-      : parametre.tarifsSAR.professionnel;
-  } else {
-    montant = typeApiculture === 'loisir' 
-      ? parametre.tarifsAMAIR.loisir 
-      : parametre.tarifsAMAIR.professionnel;
+    // Vérifier si l'utilisateur a une adhésion active de l'année N-1
+    const adhesionN1 = await Adhesion.findOne({
+      user: req.user._id,
+      organisme: 'SAR',
+      annee: annee - 1,
+      status: 'actif'
+    });
+    
+    const cotisationBase = parametre.tarifs.SAR.base;
+    const droitEntree = adhesionN1 ? 0 : parametre.tarifs.SAR.droitEntree;
+    const cotisationRuches = (nombreRuches || 0) * parametre.tarifs.SAR.cotisationParRuche;
+    
+    montant = cotisationBase + droitEntree + cotisationRuches;
+  } else if (organisme === 'AMAIR') {
+    montant = parametre.tarifs.AMAIR.base;
   }
 
   // Créer l'adhésion
@@ -64,10 +81,8 @@ const createAdhesion = asyncHandler(async (req, res) => {
     user: req.user._id,
     organisme,
     annee,
-    napi,
+    napi, 
     nombreRuches,
-    typeApiculture,
-    assurance,
     paiement: {
       montant,
       status: 'en_attente',
@@ -84,7 +99,7 @@ const createAdhesion = asyncHandler(async (req, res) => {
 });
 
 // @desc    Obtenir toutes les adhésions de l'utilisateur connecté
-// @route   GET /api/adhesions/my
+// @route   GET /api/adhesions/my-adhesions
 // @access  Private
 const getMyAdhesions = asyncHandler(async (req, res) => {
   const adhesions = await Adhesion.find({ user: req.user._id })
@@ -100,7 +115,7 @@ const getMyAdhesions = asyncHandler(async (req, res) => {
 const getAdhesionById = asyncHandler(async (req, res) => {
   const adhesion = await Adhesion.findById(req.params.id).populate(
     'user',
-    'prenom nom email phone address'
+    'prenom nom email telephone adresse dateNaissance'
   );
 
   if (!adhesion) {
@@ -128,8 +143,15 @@ const getAllAdhesions = asyncHandler(async (req, res) => {
 
   let filter = {};
   
+  // Filtrer automatiquement par l'organisme de l'admin
+  // (sauf si l'admin a explicitement demandé un autre organisme via query)
+  if (req.user.organisme && !organisme) {
+    filter.organisme = req.user.organisme;
+  } else if (organisme) {
+    filter.organisme = organisme;
+  }
+  
   if (annee) filter.annee = parseInt(annee);
-  if (organisme) filter.organisme = organisme;
   if (status) filter.status = status;
 
   const adhesions = await Adhesion.find(filter)
@@ -158,7 +180,7 @@ const updateAdhesionStatus = asyncHandler(async (req, res) => {
   adhesion.status = status || adhesion.status;
   adhesion.notes = notes !== undefined ? notes : adhesion.notes;
 
-  if (status === 'validee') {
+  if (status === 'paiement_demande') {
     adhesion.dateValidation = new Date();
   }
 
@@ -182,8 +204,8 @@ const requestPayment = asyncHandler(async (req, res) => {
   }
 
   // Mettre à jour le statut
-  adhesion.paiement.status = 'attente_paiement';
-  adhesion.status = 'validee';
+  adhesion.paiement.status = 'demande';
+  adhesion.status = 'paiement_demande';
   adhesion.dateValidation = new Date();
   await adhesion.save();
 
@@ -192,7 +214,7 @@ const requestPayment = asyncHandler(async (req, res) => {
 
   try {
     await transporter.sendMail({
-      from: process.env.EMAIL_FROM,
+      from: `"${process.env.PLATFORM_NAME}" ${process.env.SMTP_FROM_EMAIL}`,
       to: adhesion.user.email,
       subject: `Demande de paiement - Adhésion ${adhesion.organisme} ${adhesion.annee}`,
       html: `
@@ -262,7 +284,7 @@ const getStats = asyncHandler(async (req, res) => {
 
   const total = await Adhesion.countDocuments(filter);
   const enAttente = await Adhesion.countDocuments({ ...filter, status: 'en_attente' });
-  const validees = await Adhesion.countDocuments({ ...filter, status: 'validee' });
+  const validees = await Adhesion.countDocuments({ ...filter, status: 'paiement_demande' });
   const actives = await Adhesion.countDocuments({ ...filter, status: 'actif' });
   const refusees = await Adhesion.countDocuments({ ...filter, status: 'refuse' });
 
@@ -284,6 +306,83 @@ const getStats = asyncHandler(async (req, res) => {
   });
 });
 
+// @desc    Envoyer une demande d'aide pour une adhésion
+// @route   POST /api/adhesions/:id/demande-aide
+// @access  Private
+const sendHelpRequest = asyncHandler(async (req, res) => {
+  const { message } = req.body;
+  const adhesionId = req.params.id;
+
+  if (!message) {
+    res.status(400);
+    throw new Error('Veuillez fournir un message');
+  }
+
+  const adhesion = await Adhesion.findById(adhesionId).populate('user', 'prenom nom email');
+
+  if (!adhesion) {
+    res.status(404);
+    throw new Error('Adhésion non trouvée');
+  }
+
+  // Vérifier que l'utilisateur est propriétaire
+  if (adhesion.user._id.toString() !== req.user._id.toString()) {
+    res.status(403);
+    throw new Error('Non autorisé');
+  }
+
+  // Récupérer les emails des admins
+  const admins = await User.find({ role: 'admin' }).select('email');
+  const adminEmails = admins.map(admin => admin.email);
+
+  if (adminEmails.length === 0) {
+    res.status(500);
+    throw new Error('Aucun administrateur trouvé');
+  }
+console.log(adhesion)
+  // Envoyer l'email aux admins
+  try {
+    await transporter.sendMail({
+      from: `"${process.env.PLATFORM_NAME}" <${process.env.SMTP_FROM_EMAIL}>`,
+      to: adminEmails.join(', '),
+      subject: `Demande d'aide - Adhésion ${adhesion.organisme} ${adhesion.annee}`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #EF4444;">Demande d'aide</h2>
+          
+          <p>Un adhérent a besoin d'aide concernant son adhésion.</p>
+          
+          <div style="background-color: #FEF2F2; padding: 20px; border-left: 4px solid #EF4444; margin: 20px 0;">
+            <p style="margin: 5px 0;"><strong>Adhérent :</strong> ${adhesion.user.prenom} ${adhesion.user.nom}</p>
+            <p style="margin: 5px 0;"><strong>Email :</strong> ${adhesion.user.email}</p>
+            <p style="margin: 5px 0;"><strong>Organisme :</strong> ${adhesion.organisme}</p>
+            <p style="margin: 5px 0;"><strong>Année :</strong> ${adhesion.annee}</p>
+            <p style="margin: 5px 0;"><strong>Statut :</strong> ${adhesion.status}</p>
+          </div>
+          
+          <div style="background-color: #F3F4F6; padding: 20px; border-radius: 8px; margin: 20px 0;">
+            <p style="margin: 0 0 10px 0;"><strong>Message :</strong></p>
+            <p style="margin: 0; white-space: pre-wrap;">${message}</p>
+          </div>
+          
+          <p style="color: #6B7280; font-size: 12px;">
+            Veuillez contacter l'adhérent pour lui apporter votre aide.
+          </p>
+        </div>
+      `,
+    });
+
+    res.json({ 
+      success: true,
+      message: 'Demande d\'aide envoyée avec succès' 
+    });
+  } catch (error) {
+    console.error('Erreur lors de l\'envoi de l\'email:', error);
+    res.status(500);
+    throw new Error('Erreur lors de l\'envoi de la demande d\'aide');
+  }
+});
+
 module.exports = {
   createAdhesion,
   getMyAdhesions,
@@ -293,4 +392,5 @@ module.exports = {
   requestPayment,
   deleteAdhesion,
   getStats,
+  sendHelpRequest,
 };

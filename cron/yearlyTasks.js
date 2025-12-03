@@ -1,0 +1,111 @@
+const cron = require('node-cron');
+const Parametre = require('../models/parametreModel');
+
+/**
+ * Cron job qui s'exécute le 31 décembre à 23:59
+ * Crée les paramètres pour la nouvelle année N+1
+ */
+const initNouvelleAnneeCron = () => {
+  // Cron expression: '59 23 31 12 *' = à 23:59 le 31 décembre
+  cron.schedule('59 23 31 12 *', async () => {
+    try {
+      console.log('🔄 Cron: Initialisation de la nouvelle année...');
+      
+      const nextYear = new Date().getFullYear() + 1;
+
+      // Récupérer les tarifs de l'année en cours
+      const currentYear = new Date().getFullYear();
+      const currentSAR = await Parametre.findOne({ organisme: 'SAR', annee: currentYear });
+      const currentAMAIR = await Parametre.findOne({ organisme: 'AMAIR', annee: currentYear });
+
+      // Vérifier si les paramètres existent déjà
+      const existingSAR = await Parametre.findOne({ organisme: 'SAR', annee: nextYear });
+      const existingAMAIR = await Parametre.findOne({ organisme: 'AMAIR', annee: nextYear });
+
+      const created = [];
+
+      // Créer SAR si n'existe pas
+      if (!existingSAR) {
+        const sarParametre = await Parametre.create({
+          organisme: 'SAR',
+          annee: nextYear,
+          tarifs: currentSAR ? currentSAR.tarifs : { loisir: 30, professionnel: 50 },
+          adhesionsOuvertes: false, // Fermées par défaut
+          estAnneeEnCours: false
+        });
+        created.push(sarParametre);
+        console.log(`✅ Paramètres SAR ${nextYear} créés`);
+      }
+
+      // Créer AMAIR si n'existe pas
+      if (!existingAMAIR) {
+        const amairParametre = await Parametre.create({
+          organisme: 'AMAIR',
+          annee: nextYear,
+          tarifs: currentAMAIR ? currentAMAIR.tarifs : { loisir: 25, professionnel: 45 },
+          adhesionsOuvertes: false, // Fermées par défaut
+          estAnneeEnCours: false
+        });
+        created.push(amairParametre);
+        console.log(`✅ Paramètres AMAIR ${nextYear} créés`);
+      }
+
+      if (created.length > 0) {
+        console.log(`🎉 Paramètres pour l'année ${nextYear} créés avec succès`);
+      } else {
+        console.log(`ℹ️ Les paramètres pour l'année ${nextYear} existent déjà`);
+      }
+    } catch (error) {
+      console.error('❌ Erreur lors de l\'initialisation de la nouvelle année:', error);
+    }
+  });
+
+  console.log('📅 Cron job configuré: Initialisation nouvelle année (31 décembre à 23:59)');
+};
+
+/**
+ * Cron job qui s'exécute le 1er janvier à 00:01
+ * Met à jour le flag estAnneeEnCours pour la nouvelle année
+ */
+const updateAnneeEnCoursCron = () => {
+  // Cron expression: '1 0 1 1 *' = à 00:01 le 1er janvier
+  cron.schedule('1 0 1 1 *', async () => {
+    try {
+      console.log('🔄 Cron: Mise à jour de l\'année en cours...');
+      
+      const currentYear = new Date().getFullYear();
+
+      // Mettre à jour l'année en cours
+      await Parametre.updateMany(
+        { annee: currentYear },
+        { estAnneeEnCours: true, adhesionsOuvertes: true }
+      );
+
+      // Mettre à jour les autres années
+      await Parametre.updateMany(
+        { annee: { $ne: currentYear } },
+        { estAnneeEnCours: false }
+      );
+
+      console.log(`🎉 Année en cours mise à jour: ${currentYear}`);
+      console.log(`✅ Adhésions ouvertes pour ${currentYear}`);
+    } catch (error) {
+      console.error('❌ Erreur lors de la mise à jour de l\'année en cours:', error);
+    }
+  });
+
+  console.log('📅 Cron job configuré: Mise à jour année en cours (1er janvier à 00:01)');
+};
+
+/**
+ * Initialiser tous les cron jobs
+ */
+const initCronJobs = () => {
+  initNouvelleAnneeCron();
+  updateAnneeEnCoursCron();
+  console.log('✅ Tous les cron jobs sont configurés');
+};
+
+module.exports = {
+  initCronJobs
+};
