@@ -44,6 +44,8 @@ app.use('/api/actualites', require('./routes/blogRoutes'));
 console.log('  ✅ /api/actualites');
 app.use('/api/preferences', require('./routes/preferenceRoutes'));
 console.log('  ✅ /api/preferences');
+app.use('/api/communications', require('./routes/communicationRoutes'));
+console.log('  ✅ /api/communications');
 
 // Servir les fichiers statiques pour les uploads
 app.use('/uploads', express.static('uploads'));

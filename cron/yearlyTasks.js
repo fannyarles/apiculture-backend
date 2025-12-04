@@ -1,6 +1,9 @@
 const cron = require('node-cron');
 const Parametre = require('../models/parametreModel');
 const Article = require('../models/articleModel');
+const Communication = require('../models/communicationModel');
+const { getDestinataires } = require('../controllers/communicationController');
+const { envoyerCommunication } = require('../services/emailService');
 
 /**
  * Cron job qui s'exécute le 31 décembre à 23:59
@@ -141,12 +144,80 @@ const publishScheduledArticlesCron = () => {
 };
 
 /**
+ * Cron job qui s'exécute toutes les minutes
+ * Envoie automatiquement les communications programmées dont la date est atteinte
+ */
+const sendScheduledCommunicationsCron = () => {
+  // Cron expression: '* * * * *' = toutes les minutes
+  cron.schedule('* * * * *', async () => {
+    try {
+      const now = new Date();
+      console.log(`🔍 Cron: Vérification des communications programmées (${now.toLocaleString('fr-FR')})`);
+      
+      // Trouver les communications programmées dont la date est atteinte
+      const communicationsToSend = await Communication.find({
+        statut: 'programme',
+        dateProgrammee: { $lte: now }
+      });
+
+      console.log(`📊 Communications programmées trouvées: ${communicationsToSend.length}`);
+
+      if (communicationsToSend.length > 0) {
+        console.log(`📧 Cron: ${communicationsToSend.length} communication(s) à envoyer...`);
+
+        // Envoyer chaque communication
+        for (const communication of communicationsToSend) {
+          console.log(`   → Envoi de "${communication.titre}"`);
+          
+          try {
+            // Récupérer les destinataires
+            const destinataires = await getDestinataires(communication);
+            
+            if (destinataires.length === 0) {
+              console.log(`   ⚠️  Aucun destinataire pour "${communication.titre}"`);
+              continue;
+            }
+
+            // Envoyer les emails
+            const { emailsEnvoyes, emailsEchoues, erreurs } = await envoyerCommunication(
+              communication,
+              destinataires
+            );
+
+            // Mettre à jour la communication
+            communication.statut = 'envoye';
+            communication.dateEnvoi = new Date();
+            communication.emailsEnvoyes = emailsEnvoyes;
+            communication.emailsEchoues = emailsEchoues;
+            communication.erreurs = erreurs;
+            await communication.save();
+
+            console.log(`   ✅ Communication envoyée: "${communication.titre}" (${emailsEnvoyes}/${destinataires.length})`);
+          } catch (error) {
+            console.error(`   ❌ Erreur lors de l'envoi de "${communication.titre}":`, error.message);
+          }
+        }
+
+        console.log(`🎉 ${communicationsToSend.length} communication(s) envoyée(s) automatiquement`);
+      }
+    } catch (error) {
+      console.error('❌ Erreur lors de l\'envoi automatique des communications:', error);
+      console.error('   Détails:', error.message);
+      console.error('   Stack:', error.stack);
+    }
+  });
+
+  console.log('📅 Cron job configuré: Envoi automatique des communications (toutes les minutes)');
+};
+
+/**
  * Initialiser tous les cron jobs
  */
 const initCronJobs = () => {
   initNouvelleAnneeCron();
   updateAnneeEnCoursCron();
   publishScheduledArticlesCron();
+  sendScheduledCommunicationsCron();
   console.log('✅ Tous les cron jobs sont configurés');
 };
 
