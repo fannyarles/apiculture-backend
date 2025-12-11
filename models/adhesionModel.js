@@ -19,18 +19,46 @@ const adhesionSchema = mongoose.Schema(
     // Informations apicoles
     napi: {
       type: String,
-      required: false, // Optionnel car peut être rempli plus tard
+      required: false,
+    },
+    numeroAmexa: {
+      type: String,
+      required: false,
     },
     nombreRuches: {
       type: Number,
-      required: false, // Optionnel car peut être rempli plus tard
+      required: false,
       min: 1,
+    },
+    nombreRuchers: {
+      type: Number,
+      required: false,
+      min: 1,
+    },
+    localisation: {
+      departement: {
+        type: String,
+        required: false,
+      },
+      commune: {
+        type: String,
+        required: false,
+      },
+    },
+    siret: {
+      type: String,
+      required: false,
     },
     // Paiement
     paiement: {
       montant: {
         type: Number,
         required: true,
+      },
+      typePaiement: {
+        type: String,
+        enum: ['cheque', 'en_ligne'],
+        required: false,
       },
       status: {
         type: String,
@@ -60,6 +88,41 @@ const adhesionSchema = mongoose.Schema(
     // Date de validation
     dateValidation: {
       type: Date,
+    },
+    // Signature électronique
+    signature: {
+      type: String,
+      required: false,
+    },
+    // PDF signé
+    pdfKey: {
+      type: String,
+    },
+    pdfUrl: {
+      type: String,
+    },
+    // Informations personnelles (snapshot au moment de l'adhésion)
+    informationsPersonnelles: {
+      nom: String,
+      prenom: String,
+      dateNaissance: Date,
+      adresse: {
+        rue: String,
+        codePostal: String,
+        ville: String,
+      },
+      telephone: String,
+      email: String,
+    },
+    // Informations spécifiques par organisme
+    informationsSpecifiques: {
+      type: mongoose.Schema.Types.Mixed,
+      required: false,
+    },
+    // Adhésion AMAIR gratuite pour adhérents SAR
+    adhesionAMAIRGratuite: {
+      type: Boolean,
+      default: false,
     },
   },
   {

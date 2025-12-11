@@ -46,6 +46,14 @@ app.use('/api/preferences', require('./routes/preferenceRoutes'));
 console.log('  ✅ /api/preferences');
 app.use('/api/communications', require('./routes/communicationRoutes'));
 console.log('  ✅ /api/communications');
+app.use('/api/organismes', require('./routes/organismeRoutes'));
+console.log('  ✅ /api/organismes');
+app.use('/api/admin-management', require('./routes/adminManagementRoutes'));
+console.log('  ✅ /api/admin-management');
+app.use('/api/users', require('./routes/superAdminRoutes'));
+console.log('  ✅ /api/users');
+app.use('/api/permissions', require('./routes/permissionRoutes'));
+console.log('  ✅ /api/permissions');
 
 // Servir les fichiers statiques pour les uploads
 app.use('/uploads', express.static('uploads'));

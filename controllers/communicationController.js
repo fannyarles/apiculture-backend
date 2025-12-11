@@ -20,15 +20,27 @@ const getDestinataires = async (communication) => {
   let destinataires = [];
 
   if (communication.estSanitaire) {
-    // Alerte sanitaire : tous les adhérents qui acceptent les alertes sanitaires
+    // Intérêt général : tous les adhérents qui acceptent les alertes sanitaires
     for (const user of adherentsActifs) {
       const prefs = await Preference.findOne({ user: user._id });
       if (prefs?.communications?.alertesSanitaires) {
         destinataires.push(user);
       }
     }
+  } else if (communication.destinataires === 'SAR' || communication.destinataires === 'AMAIR') {
+    // Nouveau format : Communication pour un organisme spécifique
+    const targetOrganisme = communication.destinataires;
+    for (const user of adherentsActifs) {
+      const userOrganismes = user.organismes || (user.organisme ? [user.organisme] : []);
+      if (userOrganismes.includes(targetOrganisme)) {
+        const prefs = await Preference.findOne({ user: user._id });
+        if (prefs?.communications?.mesGroupements) {
+          destinataires.push(user);
+        }
+      }
+    }
   } else if (communication.destinataires === 'mon_groupement') {
-    // Communication pour le groupement de l'auteur uniquement
+    // Ancien format : Communication pour le groupement de l'auteur uniquement
     for (const user of adherentsActifs) {
       if (user.organisme === communication.organisme) {
         const prefs = await Preference.findOne({ user: user._id });

@@ -67,8 +67,8 @@ const createPaymentSession = asyncHandler(async (req, res) => {
               name: `Adhésion ${adhesion.organisme} ${adhesion.annee}`,
               description: `Adhésion à ${
                 adhesion.organisme === 'SAR'
-                  ? 'Syndicat des Apiculteurs Réunis'
-                  : 'Association des Miels et Apiculteurs Indépendants Réunis'
+                  ? 'Syndicat Apicole de la Réunion'
+                  : 'Association de la Maison de l\'Apiculture de la Réunion'
               }`,
             },
             unit_amount: Math.round(adhesion.paiement.montant * 100), // Montant en centimes
@@ -161,37 +161,109 @@ const handleStripeWebhook = asyncHandler(async (req, res) => {
         adhesion.status = 'actif';
         await adhesion.save();
         
+        // Si adhésion SAR avec adhesionAMAIRGratuite, créer automatiquement l'adhésion AMAIR
+        let adhesionAMAIRCreee = false;
+        if (adhesion.organisme === 'SAR' && adhesion.adhesionAMAIRGratuite) {
+          try {
+            const adhesionAMAIR = new Adhesion({
+              user: adhesion.user._id,
+              organisme: 'AMAIR',
+              annee: adhesion.annee,
+              napi: adhesion.napi,
+              numeroAmexa: adhesion.numeroAmexa,
+              nombreRuches: adhesion.nombreRuches,
+              nombreRuchers: adhesion.nombreRuchers,
+              localisation: adhesion.localisation,
+              siret: adhesion.siret,
+              paiement: {
+                montant: 0,
+                typePaiement: 'gratuit',
+                status: 'paye',
+                datePaiement: new Date(),
+              },
+              status: 'actif',
+              dateValidation: new Date(),
+              informationsPersonnelles: adhesion.informationsPersonnelles,
+              informationsSpecifiques: {
+                AMAIR: {
+                  adherentSAR: true
+                }
+              },
+            });
+            await adhesionAMAIR.save();
+            adhesionAMAIRCreee = true;
+            console.log(`✅ Adhésion AMAIR gratuite créée automatiquement pour l'adhérent SAR ${adhesion.user._id}`);
+          } catch (error) {
+            console.error('Erreur lors de la création de l\'adhésion AMAIR gratuite:', error);
+          }
+        }
+        
         // Envoyer email de confirmation à l'utilisateur
+        const emailContent = adhesionAMAIRCreee ? `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #10B981;">✅ Paiement confirmé</h2>
+            
+            <p>Bonjour ${adhesion.user.prenom} ${adhesion.user.nom},</p>
+            
+            <p>Nous avons bien reçu votre paiement de <strong>${adhesion.paiement.montant.toFixed(2)} €</strong>.</p>
+            
+            <div style="background-color: #F3F4F6; padding: 20px; border-radius: 8px; margin: 20px 0;">
+              <p style="margin: 5px 0;"><strong>Organisme :</strong> ${adhesion.organisme}</p>
+              <p style="margin: 5px 0;"><strong>Année :</strong> ${adhesion.annee}</p>
+              <p style="margin: 5px 0;"><strong>Date de paiement :</strong> ${new Date().toLocaleDateString('fr-FR')}</p>
+            </div>
+            
+            <p>Votre adhésion est maintenant <strong style="color: #10B981;">active</strong>.</p>
+            
+            <div style="background-color: #FEF3C7; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #F59E0B;">
+              <h3 style="color: #92400E; margin-top: 0;">🎁 Bonus : Adhésion AMAIR gratuite</h3>
+              <p style="color: #78350F; margin-bottom: 0;">
+                En tant qu'adhérent SAR, vous bénéficiez automatiquement d'une adhésion gratuite à l'AMAIR 
+                (Association de la Maison de l'Apiculture de la Réunion) pour l'année ${adhesion.annee} (valeur 50€).
+              </p>
+            </div>
+            
+            <p>Vous pouvez consulter vos adhésions à tout moment depuis votre espace personnel.</p>
+            
+            <hr style="border: none; border-top: 1px solid #E5E7EB; margin: 30px 0;">
+            
+            <p style="color: #6B7280; font-size: 12px;">
+              Merci de votre confiance,<br>
+              L'équipe ${adhesion.organisme}
+            </p>
+          </div>
+        ` : `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #10B981;">✅ Paiement confirmé</h2>
+            
+            <p>Bonjour ${adhesion.user.prenom} ${adhesion.user.nom},</p>
+            
+            <p>Nous avons bien reçu votre paiement de <strong>${adhesion.paiement.montant.toFixed(2)} €</strong>.</p>
+            
+            <div style="background-color: #F3F4F6; padding: 20px; border-radius: 8px; margin: 20px 0;">
+              <p style="margin: 5px 0;"><strong>Organisme :</strong> ${adhesion.organisme}</p>
+              <p style="margin: 5px 0;"><strong>Année :</strong> ${adhesion.annee}</p>
+              <p style="margin: 5px 0;"><strong>Date de paiement :</strong> ${new Date().toLocaleDateString('fr-FR')}</p>
+            </div>
+            
+            <p>Votre adhésion est maintenant <strong style="color: #10B981;">active</strong>.</p>
+            
+            <p>Vous pouvez consulter votre adhésion à tout moment depuis votre espace personnel.</p>
+            
+            <hr style="border: none; border-top: 1px solid #E5E7EB; margin: 30px 0;">
+            
+            <p style="color: #6B7280; font-size: 12px;">
+              Merci de votre confiance,<br>
+              L'équipe ${adhesion.organisme}
+            </p>
+          </div>
+        `;
+        
         await transporter.sendMail({
           from: `"${process.env.PLATFORM_NAME}" ${process.env.SMTP_FROM_EMAIL}`,
           to: adhesion.user.email,
           subject: `Confirmation de paiement - Adhésion ${adhesion.organisme} ${adhesion.annee}`,
-          html: `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-              <h2 style="color: #10B981;">✅ Paiement confirmé</h2>
-              
-              <p>Bonjour ${adhesion.user.prenom} ${adhesion.user.nom},</p>
-              
-              <p>Nous avons bien reçu votre paiement de <strong>${adhesion.paiement.montant.toFixed(2)} €</strong>.</p>
-              
-              <div style="background-color: #F3F4F6; padding: 20px; border-radius: 8px; margin: 20px 0;">
-                <p style="margin: 5px 0;"><strong>Organisme :</strong> ${adhesion.organisme}</p>
-                <p style="margin: 5px 0;"><strong>Année :</strong> ${adhesion.annee}</p>
-                <p style="margin: 5px 0;"><strong>Date de paiement :</strong> ${new Date().toLocaleDateString('fr-FR')}</p>
-              </div>
-              
-              <p>Votre adhésion est maintenant <strong style="color: #10B981;">active</strong>.</p>
-              
-              <p>Vous pouvez consulter votre adhésion à tout moment depuis votre espace personnel.</p>
-              
-              <hr style="border: none; border-top: 1px solid #E5E7EB; margin: 30px 0;">
-              
-              <p style="color: #6B7280; font-size: 12px;">
-                Merci de votre confiance,<br>
-                L'équipe ${adhesion.organisme}
-              </p>
-            </div>
-          `,
+          html: emailContent,
         });
 
         // Envoyer notification à l'admin (optionnel)

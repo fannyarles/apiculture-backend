@@ -34,7 +34,7 @@ const communicationSchema = mongoose.Schema(
     destinataires: {
       type: String,
       required: true,
-      enum: ['mon_groupement', 'tous_groupements'],
+      enum: ['mon_groupement', 'tous_groupements', 'SAR', 'AMAIR'],
       default: 'mon_groupement',
     },
     dateEnvoi: {

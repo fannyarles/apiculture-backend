@@ -88,7 +88,7 @@ const envoyerEmail = async (destinataire, communication, organisme) => {
       },
       {
         headers: {
-          'api-key': process.env.SMTP_PASS,
+          'api-key': process.env.BREVO_API_KEY,
           'Content-Type': 'application/json'
         }
       }

@@ -127,10 +127,31 @@ const fileExists = async (key) => {
   }
 };
 
+/**
+ * Télécharge un fichier depuis S3
+ * @param {string} key - La clé du fichier dans S3
+ * @returns {Promise<Buffer>} - Le contenu du fichier
+ */
+const downloadFile = async (key) => {
+  const params = {
+    Bucket: bucketName,
+    Key: key
+  };
+
+  try {
+    const result = await s3.getObject(params).promise();
+    return result.Body;
+  } catch (error) {
+    console.error('Erreur téléchargement S3:', error);
+    throw new Error('Erreur lors du téléchargement du fichier depuis S3');
+  }
+};
+
 module.exports = {
   uploadFile,
   getSignedUrl,
   deleteFile,
   listFiles,
-  fileExists
+  fileExists,
+  downloadFile
 };

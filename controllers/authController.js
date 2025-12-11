@@ -69,6 +69,7 @@ const registerUser = asyncHandler(async (req, res) => {
       telephone: user.telephone,
       adresse: user.adresse,
       role: user.role,
+      roles: user.roles,
       token: generateToken(user._id),
     });
   } else {
@@ -105,7 +106,10 @@ const loginUser = asyncHandler(async (req, res) => {
       telephone: user.telephone,
       adresse: user.adresse,
       role: user.role,
+      roles: user.roles,
       organisme: user.organisme,
+      organismes: user.organismes,
+      permissions: user.permissions,
       token: generateToken(user._id),
     });
   } else {
@@ -131,7 +135,10 @@ const getUserProfile = asyncHandler(async (req, res) => {
       adresse: user.adresse,
       dateNaissance: user.dateNaissance,
       role: user.role,
+      roles: user.roles,
       organisme: user.organisme,
+      organismes: user.organismes,
+      permissions: user.permissions,
       isActive: user.isActive,
       // Ajouter personalInfo avec mapping pour compatibilité frontend
       personalInfo: {
@@ -185,6 +192,7 @@ const updateUserProfile = asyncHandler(async (req, res) => {
       adresse: updatedUser.adresse,
       dateNaissance: updatedUser.dateNaissance,
       role: updatedUser.role,
+      roles: updatedUser.roles,
       token: generateToken(updatedUser._id),
     });
   } else {

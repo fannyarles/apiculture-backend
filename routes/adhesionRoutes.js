@@ -10,6 +10,7 @@ const {
   deleteAdhesion,
   getStats,
   sendHelpRequest,
+  generateAdhesionPDFController,
 } = require('../controllers/adhesionController');
 const { protect, admin } = require('../middleware/authMiddleware');
 
@@ -31,6 +32,7 @@ router.get('/', protect, async (req, res, next) => {
 // Routes avec paramètres - DOIVENT être après les routes spécifiques
 router.get('/:id', protect, getAdhesionById);
 router.post('/:id/demande-aide', protect, sendHelpRequest);
+router.post('/:id/generate-pdf', protect, generateAdhesionPDFController);
 
 // Routes admin
 router.put('/:id/status', protect, admin, updateAdhesionStatus);

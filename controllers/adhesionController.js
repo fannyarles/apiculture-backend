@@ -3,6 +3,7 @@ const Adhesion = require('../models/adhesionModel');
 const Parametre = require('../models/parametreModel');
 const User = require('../models/userModel');
 const nodemailer = require('nodemailer');
+const { generateAndUploadAdhesionPDF } = require('../services/pdfService');
 
 // Configuration du transporteur SMTP
 const transporter = nodemailer.createTransport({
@@ -25,9 +26,20 @@ const createAdhesion = asyncHandler(async (req, res) => {
   const {
     organisme,
     annee,
-    napi,
-    nombreRuches,
+    informationsApicoles,
+    informationsPersonnelles,
+    informationsSpecifiques,
+    paiement,
+    signature,
   } = req.body;
+
+  // Extraire les informations apicoles
+  const nombreRuches = informationsApicoles?.nombreRuches;
+  const nombreRuchers = informationsApicoles?.nombreRuchers;
+  const napi = informationsApicoles?.napi;
+  const numeroAmexa = informationsApicoles?.numeroAmexa;
+  const siret = informationsApicoles?.siret;
+  const localisation = informationsApicoles?.localisation;
 
   // Vérifier si l'utilisateur a déjà une adhésion pour cette année et cet organisme
   const existingAdhesion = await Adhesion.findOne({
@@ -76,16 +88,38 @@ const createAdhesion = asyncHandler(async (req, res) => {
     montant = parametre.tarifs.AMAIR.base;
   }
 
-  // Créer l'adhésion
+  // Créer l'adhésion avec toutes les informations
   const adhesion = await Adhesion.create({
     user: req.user._id,
     organisme,
     annee,
-    napi, 
+    napi,
+    numeroAmexa,
     nombreRuches,
+    nombreRuchers,
+    siret,
+    localisation: {
+      departement: localisation?.departement,
+      commune: localisation?.commune,
+    },
+    informationsPersonnelles: {
+      nom: informationsPersonnelles?.nom,
+      prenom: informationsPersonnelles?.prenom,
+      dateNaissance: informationsPersonnelles?.dateNaissance,
+      adresse: {
+        rue: informationsPersonnelles?.adresse?.rue,
+        codePostal: informationsPersonnelles?.adresse?.codePostal,
+        ville: informationsPersonnelles?.adresse?.ville,
+      },
+      telephone: informationsPersonnelles?.telephone,
+      email: informationsPersonnelles?.email,
+    },
+    informationsSpecifiques: informationsSpecifiques || {},
+    signature,
     paiement: {
       montant,
-      status: 'en_attente',
+      typePaiement: paiement?.typePaiement,
+      status: 'non_demande',
     },
     status: 'en_attente',
   });
@@ -126,7 +160,7 @@ const getAdhesionById = asyncHandler(async (req, res) => {
   // Vérifier que l'utilisateur est propriétaire ou admin
   if (
     adhesion.user._id.toString() !== req.user._id.toString() &&
-    req.user.role !== 'admin'
+    !['admin', 'super_admin'].includes(req.user.role)
   ) {
     res.status(403);
     throw new Error('Non autorisé à voir cette adhésion');
@@ -140,14 +174,18 @@ const getAdhesionById = asyncHandler(async (req, res) => {
 // @access  Private/Admin
 const getAllAdhesions = asyncHandler(async (req, res) => {
   const { annee, organisme, status } = req.query;
+  const { getOrganismeFilter } = require('../utils/organismeHelper');
 
   let filter = {};
   
-  // Filtrer automatiquement par l'organisme de l'admin
-  // (sauf si l'admin a explicitement demandé un autre organisme via query)
-  if (req.user.organisme && !organisme) {
-    filter.organisme = req.user.organisme;
-  } else if (organisme) {
+  // Filtrer automatiquement par les organismes de l'admin
+  // Super admin voit tout, admin voit ses organismes
+  if (!organisme) {
+    // Pas de filtre organisme spécifique : utiliser les organismes de l'admin
+    const organismeFilter = getOrganismeFilter(req.user);
+    filter = { ...filter, ...organismeFilter };
+  } else {
+    // Filtre organisme spécifique demandé
     filter.organisme = organisme;
   }
   
@@ -221,7 +259,7 @@ const requestPayment = asyncHandler(async (req, res) => {
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
           <h2 style="color: #4F46E5;">Bonjour ${adhesion.user.prenom} ${adhesion.user.nom},</h2>
           
-          <p>Votre demande d'adhésion à <strong>${adhesion.organisme === 'SAR' ? 'Syndicat des Apiculteurs Réunis' : 'Association des Miels et Apiculteurs Indépendants Réunis'}</strong> pour l'année ${adhesion.annee} a été validée.</p>
+          <p>Votre demande d'adhésion à <strong>${adhesion.organisme === 'SAR' ? 'Syndicat Apicole de la Réunion' : 'Association de la Maison de l\'Apiculture de la Réunion'}</strong> pour l'année ${adhesion.annee} a été validée.</p>
           
           <div style="background-color: #F3F4F6; padding: 20px; border-radius: 8px; margin: 20px 0;">
             <p style="margin: 0;"><strong>Montant à régler :</strong> ${adhesion.paiement.montant.toFixed(2)} €</p>
@@ -383,6 +421,55 @@ console.log(adhesion)
   }
 });
 
+// @desc    Générer le PDF d'adhésion avec signature
+// @route   POST /api/adhesions/:id/generate-pdf
+// @access  Private
+const generateAdhesionPDFController = asyncHandler(async (req, res) => {
+  const { signatureBase64 } = req.body;
+
+  if (!signatureBase64) {
+    res.status(400);
+    throw new Error('La signature est requise');
+  }
+
+  // Récupérer l'adhésion avec toutes les informations
+  const adhesion = await Adhesion.findById(req.params.id)
+    .populate('user')
+    .populate('ruches');
+
+  if (!adhesion) {
+    res.status(404);
+    throw new Error('Adhésion non trouvée');
+  }
+
+  // Vérifier que l'utilisateur est propriétaire ou admin
+  if (adhesion.user._id.toString() !== req.user._id.toString() && !['admin', 'super_admin'].includes(req.user.role)) {
+    res.status(403);
+    throw new Error('Non autorisé');
+  }
+
+  try {
+    // Générer et uploader le PDF
+    const result = await generateAndUploadAdhesionPDF(adhesion, signatureBase64);
+
+    // Mettre à jour l'adhésion avec la clé S3 du PDF
+    adhesion.pdfKey = result.key;
+    adhesion.pdfUrl = result.url;
+    await adhesion.save();
+
+    res.json({
+      success: true,
+      message: 'PDF généré avec succès',
+      pdfKey: result.key,
+      pdfUrl: result.url
+    });
+  } catch (error) {
+    console.error('Erreur génération PDF:', error);
+    res.status(500);
+    throw new Error('Erreur lors de la génération du PDF');
+  }
+});
+
 module.exports = {
   createAdhesion,
   getMyAdhesions,
@@ -392,5 +479,6 @@ module.exports = {
   requestPayment,
   deleteAdhesion,
   getStats,
+  generateAdhesionPDFController,
   sendHelpRequest,
 };

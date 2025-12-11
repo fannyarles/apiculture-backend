@@ -34,7 +34,7 @@ const articleSchema = mongoose.Schema(
     },
     visibilite: {
       type: String,
-      enum: ['tous', 'organisme'],
+      enum: ['tous', 'organisme', 'SAR', 'AMAIR'],
       required: [true, 'La visibilité est requise'],
       default: 'organisme',
     },
@@ -133,7 +133,14 @@ articleSchema.methods.isVisibleFor = function (user) {
     if (this.visibilite === 'tous') {
       return true; // Visible par tous les adhérents
     } else if (this.visibilite === 'organisme') {
+      // Ancien format : vérifier l'organisme de l'utilisateur
       return user && user.organisme === this.organisme;
+    } else if (this.visibilite === 'SAR' || this.visibilite === 'AMAIR') {
+      // Nouveau format : visibilité spécifique à un organisme
+      if (!user) return false;
+      // Vérifier si l'utilisateur appartient à cet organisme
+      const userOrganismes = user.organismes || (user.organisme ? [user.organisme] : []);
+      return userOrganismes.includes(this.visibilite);
     }
   }
 

@@ -46,7 +46,7 @@ const protect = asyncHandler(async (req, res, next) => {
 
 // Vérifier si l'utilisateur est admin
 const admin = (req, res, next) => {
-  if (req.user && req.user.role === 'admin') {
+  if (req.user && (req.user.hasRole('admin') || req.user.hasRole('super_admin'))) {
     next();
   } else {
     res.status(403);

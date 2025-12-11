@@ -176,7 +176,7 @@ const getArticleBySlug = asyncHandler(async (req, res) => {
   }
 
   // Incrémenter les vues (sauf pour l'auteur et les admins)
-  if (req.user.role !== 'admin' && article.auteur._id.toString() !== req.user._id.toString()) {
+  if (!['admin', 'super_admin'].includes(req.user.role) && article.auteur._id.toString() !== req.user._id.toString()) {
     article.vues += 1;
     await article.save();
   }
