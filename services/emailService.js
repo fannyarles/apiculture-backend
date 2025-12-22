@@ -156,8 +156,147 @@ const envoyerCommunication = async (communication, destinataires) => {
   };
 };
 
+// Template HTML pour email de bienvenue admin
+const getAdminWelcomeTemplate = (prenom, nom, email, password, organismes) => {
+  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+  const organismesText = organismes && organismes.length > 0 
+    ? organismes.join(', ') 
+    : 'Aucun organisme assigné';
+
+  return `
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bienvenue - Compte Administrateur</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f4f4f4;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f4f4f4; padding: 20px 0;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+          
+          <!-- Header -->
+          <tr>
+            <td style="padding: 40px 30px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); text-align: center;">
+              <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: bold;">Bienvenue !</h1>
+              <p style="margin: 10px 0 0 0; color: #ffffff; font-size: 16px;">Votre compte administrateur a été créé</p>
+            </td>
+          </tr>
+          
+          <!-- Contenu -->
+          <tr>
+            <td style="padding: 40px 30px;">
+              <p style="margin: 0 0 20px 0; font-size: 16px; color: #374151; line-height: 1.6;">
+                Bonjour <strong>${prenom} ${nom}</strong>,
+              </p>
+              
+              <p style="margin: 0 0 20px 0; font-size: 16px; color: #374151; line-height: 1.6;">
+                Un compte administrateur a été créé pour vous sur la plateforme Abeille Réunion.
+              </p>
+              
+              <div style="background-color: #f9fafb; border-left: 4px solid #667eea; padding: 20px; margin: 30px 0;">
+                <h2 style="margin: 0 0 15px 0; font-size: 18px; color: #1f2937;">Vos identifiants de connexion</h2>
+                
+                <p style="margin: 0 0 10px 0; font-size: 14px; color: #6b7280;">
+                  <strong style="color: #374151;">Email :</strong><br>
+                  <span style="font-family: monospace; font-size: 15px; color: #4f46e5;">${email}</span>
+                </p>
+                
+                <p style="margin: 0 0 10px 0; font-size: 14px; color: #6b7280;">
+                  <strong style="color: #374151;">Mot de passe temporaire :</strong><br>
+                  <span style="font-family: monospace; font-size: 15px; color: #4f46e5;">${password}</span>
+                </p>
+                
+                <p style="margin: 15px 0 0 0; font-size: 14px; color: #6b7280;">
+                  <strong style="color: #374151;">Organisme(s) assigné(s) :</strong><br>
+                  <span style="font-size: 15px; color: #374151;">${organismesText}</span>
+                </p>
+              </div>
+              
+              <p style="margin: 0 0 20px 0; font-size: 16px; color: #374151; line-height: 1.6;">
+                Pour des raisons de sécurité, nous vous recommandons fortement de <strong>changer votre mot de passe</strong> lors de votre première connexion.
+              </p>
+              
+              <div style="text-align: center; margin: 30px 0;">
+                <a href="${frontendUrl}/login" style="display: inline-block; padding: 14px 32px; background-color: #4f46e5; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px;">Se connecter</a>
+              </div>
+              
+              <p style="margin: 20px 0 0 0; font-size: 14px; color: #6b7280; line-height: 1.6;">
+                Si vous avez des questions ou rencontrez des difficultés, n'hésitez pas à contacter le super administrateur.
+              </p>
+            </td>
+          </tr>
+          
+          <!-- Footer -->
+          <tr>
+            <td style="padding: 20px 30px; background-color: #f9fafb; border-top: 1px solid #e5e7eb; text-align: center;">
+              <p style="margin: 0; font-size: 12px; color: #6b7280; line-height: 1.5;">
+                Cet email a été envoyé automatiquement. Merci de ne pas y répondre.
+                <br>
+                © ${new Date().getFullYear()} Abeille Réunion - Tous droits réservés
+              </p>
+            </td>
+          </tr>
+          
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+  `;
+};
+
+// Envoyer un email de bienvenue à un nouvel administrateur
+const envoyerEmailBienvenueAdmin = async (admin, passwordClair) => {
+  try {
+    const emailFrom = process.env.EMAIL_FROM_SAR || process.env.EMAIL_FROM_AMAIR;
+
+    const htmlContent = getAdminWelcomeTemplate(
+      admin.prenom,
+      admin.nom,
+      admin.email,
+      passwordClair,
+      admin.organismes
+    );
+
+    const response = await axios.post(
+      'https://api.brevo.com/v3/smtp/email',
+      {
+        sender: {
+          email: emailFrom,
+          name: 'Abeille Réunion - Administration'
+        },
+        to: [
+          {
+            email: admin.email,
+            name: `${admin.prenom} ${admin.nom}`
+          }
+        ],
+        subject: 'Bienvenue - Votre compte administrateur',
+        htmlContent: htmlContent
+      },
+      {
+        headers: {
+          'api-key': process.env.BREVO_API_KEY,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+
+    console.log(`✅ Email de bienvenue envoyé à ${admin.email}`);
+    return { success: true, messageId: response.data.messageId };
+  } catch (error) {
+    console.error(`Erreur envoi email de bienvenue à ${admin.email}:`, error.response?.data || error.message);
+    throw new Error(error.response?.data?.message || error.message);
+  }
+};
+
 module.exports = {
   envoyerEmail,
   envoyerCommunication,
-  getEmailTemplate
+  getEmailTemplate,
+  envoyerEmailBienvenueAdmin
 };

@@ -78,32 +78,6 @@ const userSchema = mongoose.Schema(
         message: 'Un administrateur doit avoir au moins un organisme'
       }
     },
-    permissions: {
-      communications: {
-        type: Boolean,
-        default: function() {
-          return this.role === 'super_admin';
-        },
-      },
-      blog: {
-        type: Boolean,
-        default: function() {
-          return this.role === 'super_admin';
-        },
-      },
-      adherents: {
-        type: Boolean,
-        default: function() {
-          return this.role === 'super_admin';
-        },
-      },
-      paiementLink: {
-        type: Boolean,
-        default: function() {
-          return this.role === 'super_admin';
-        },
-      },
-    },
     isActive: {
       type: Boolean,
       default: true,

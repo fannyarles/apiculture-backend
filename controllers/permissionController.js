@@ -107,6 +107,7 @@ const getPermissionsStructure = asyncHandler(async (req, res) => {
         { key: 'access', label: 'Accès au module adhérents', description: 'Consulter la liste des adhérents' },
         { key: 'sendPaymentLink', label: 'Envoyer des liens de paiement', description: 'Envoyer des liens de paiement par email' },
         { key: 'manageAdhesions', label: 'Gérer les adhésions', description: 'Créer, modifier et supprimer des adhésions' },
+        { key: 'changeAdherentStatus', label: 'Changer le statut de l\'adhérent', description: 'Marquer les paiements comme effectués et modifier le statut' },
         { key: 'exportData', label: 'Exporter les données', description: 'Exporter les données des adhérents' },
       ],
     },

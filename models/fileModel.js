@@ -34,6 +34,9 @@ const fileSchema = mongoose.Schema(
         'kbis',
         'attestation_assurance',
         'certificat_sanitaire',
+        'bulletin_adhesion',
+        'attestation_adhesion',
+        'declaration_ruches',
         'autre'
       ],
       required: true,

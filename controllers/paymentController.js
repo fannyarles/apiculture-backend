@@ -2,6 +2,9 @@ const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const asyncHandler = require('express-async-handler');
 const nodemailer = require('nodemailer');
 const Adhesion = require('../models/adhesionModel');
+const Service = require('../models/serviceModel');
+const Permission = require('../models/permissionModel');
+const { generateAndUploadAttestation } = require('../services/pdfService');
 
 // Configuration du transporteur SMTP
 const transporter = nodemailer.createTransport({
@@ -15,6 +18,122 @@ const transporter = nodemailer.createTransport({
   tls: {
     rejectUnauthorized: false
   }
+});
+
+// @desc    Marquer un paiement comme effectué manuellement (admin)
+// @route   POST /api/payment/mark-paid/:adhesionId
+// @access  Private/Admin (avec permission changeAdherentStatus)
+const markPaymentAsPaid = asyncHandler(async (req, res) => {
+  // Vérifier les permissions
+  if (req.user?.role !== 'super_admin') {
+    const permissions = await Permission.findOne({ userId: req.user._id });
+    if (!permissions?.adhesions?.changeAdherentStatus) {
+      res.status(403);
+      throw new Error('Accès refusé - Permission insuffisante');
+    }
+  }
+
+  const { adhesionId } = req.params;
+  const { typePaiement, datePaiement, note } = req.body;
+
+  if (!typePaiement || !['cheque', 'espece'].includes(typePaiement)) {
+    res.status(400);
+    throw new Error('Mode de paiement invalide (cheque ou espece)');
+  }
+
+  if (!datePaiement) {
+    res.status(400);
+    throw new Error('La date de paiement est requise');
+  }
+
+  const adhesion = await Adhesion.findById(adhesionId).populate('user', 'prenom nom email');
+
+  if (!adhesion) {
+    res.status(404);
+    throw new Error('Adhésion non trouvée');
+  }
+
+  if (adhesion.paiement?.status === 'paye') {
+    res.status(400);
+    throw new Error('Cette adhésion est déjà marquée comme payée');
+  }
+
+  adhesion.paiement.status = 'paye';
+  adhesion.paiement.typePaiement = typePaiement;
+  adhesion.paiement.datePaiement = new Date(datePaiement);
+  adhesion.paiement.note = note !== undefined ? note : adhesion.paiement.note;
+  adhesion.status = 'actif';
+  adhesion.dateValidation = new Date();
+  
+  await adhesion.save();
+
+  // Générer et uploader l'attestation d'adhésion
+  try {
+    const attestationResult = await generateAndUploadAttestation(adhesion);
+    adhesion.attestationKey = attestationResult.key;
+    adhesion.attestationUrl = attestationResult.url;
+    await adhesion.save();
+  } catch (attestationError) {
+    console.error('Erreur lors de la génération de l\'attestation:', attestationError);
+    // Ne pas bloquer le processus si l'attestation échoue
+  }
+
+  // Si adhésion SAR avec adhesionAMAIRGratuite, créer automatiquement l'adhésion AMAIR
+  if (adhesion.organisme === 'SAR' && adhesion.adhesionAMAIRGratuite) {
+    const existingAMAIR = await Adhesion.findOne({
+      user: adhesion.user._id,
+      organisme: 'AMAIR',
+      annee: adhesion.annee,
+    });
+
+    if (!existingAMAIR) {
+      try {
+        const adhesionAMAIR = new Adhesion({
+          user: adhesion.user._id,
+          organisme: 'AMAIR',
+          annee: adhesion.annee,
+          napi: adhesion.napi,
+          numeroAmexa: adhesion.numeroAmexa,
+          nombreRuches: adhesion.nombreRuches,
+          nombreRuchers: adhesion.nombreRuchers,
+          localisation: adhesion.localisation,
+          siret: adhesion.siret,
+          paiement: {
+            montant: 0,
+            typePaiement: 'gratuit',
+            status: 'paye',
+            datePaiement: new Date(),
+          },
+          status: 'actif',
+          dateValidation: new Date(),
+          informationsPersonnelles: adhesion.informationsPersonnelles,
+          informationsSpecifiques: {
+            AMAIR: {
+              adherentSAR: true,
+            },
+          },
+        });
+        await adhesionAMAIR.save();
+        
+        // Générer l'attestation pour l'adhésion AMAIR gratuite
+        try {
+          const attestationAMAIR = await generateAndUploadAttestation(adhesionAMAIR);
+          adhesionAMAIR.attestationKey = attestationAMAIR.key;
+          adhesionAMAIR.attestationUrl = attestationAMAIR.url;
+          await adhesionAMAIR.save();
+        } catch (attestationError) {
+          console.error('Erreur génération attestation AMAIR:', attestationError);
+        }
+      } catch (error) {
+        console.error('Erreur lors de la création de l\'adhésion AMAIR gratuite:', error);
+      }
+    }
+  }
+
+  res.json({
+    success: true,
+    adhesion,
+  });
 });
 
 // @desc    Créer une session de paiement Stripe
@@ -148,7 +267,81 @@ const handleStripeWebhook = asyncHandler(async (req, res) => {
     const session = event.data.object;
 
     try {
-      // Mettre à jour l'adhésion
+      // Vérifier si c'est un paiement de service ou d'adhésion
+      if (session.metadata.type === 'service') {
+        // Traitement du paiement de service
+        const service = await Service.findById(session.metadata.serviceId).populate(
+          'user',
+          'prenom nom email'
+        );
+
+        if (service) {
+          service.paiement.status = 'paye';
+          service.paiement.datePaiement = new Date();
+          service.paiement.stripePaymentIntentId = session.payment_intent;
+          
+          // Mettre à jour le statut global
+          if (service.caution.status === 'recu') {
+            service.status = 'actif';
+            service.dateValidation = new Date();
+          } else {
+            service.status = 'en_attente_caution';
+          }
+          
+          await service.save();
+
+          // Envoyer email de confirmation
+          const emailContent = `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+              <h2 style="color: #10B981;">✅ Paiement confirmé - ${service.nom}</h2>
+              
+              <p>Bonjour ${service.user.prenom} ${service.user.nom},</p>
+              
+              <p>Nous avons bien reçu votre paiement de <strong>${service.paiement.montant.toFixed(2)} €</strong> pour le droit d'usage des services de la miellerie.</p>
+              
+              <div style="background-color: #F3F4F6; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                <p style="margin: 5px 0;"><strong>Service :</strong> ${service.nom}</p>
+                <p style="margin: 5px 0;"><strong>Année :</strong> ${service.annee}</p>
+                <p style="margin: 5px 0;"><strong>Date de paiement :</strong> ${new Date().toLocaleDateString('fr-FR')}</p>
+              </div>
+              
+              ${service.caution.status === 'recu' ? `
+                <p>Votre accès aux services de la miellerie est maintenant <strong style="color: #10B981;">actif</strong>.</p>
+              ` : `
+                <div style="background-color: #FEF3C7; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #F59E0B;">
+                  <h3 style="color: #92400E; margin-top: 0;">⚠️ Chèque de caution requis</h3>
+                  <p style="color: #78350F; margin-bottom: 0;">
+                    Pour finaliser votre inscription, n'oubliez pas d'envoyer votre chèque de caution de ${service.caution.montant} € 
+                    à l'ordre de l'AMAIR. Votre accès sera activé dès réception du chèque.
+                  </p>
+                </div>
+              `}
+              
+              <p>Vous pouvez consulter vos services à tout moment depuis votre espace personnel.</p>
+              
+              <hr style="border: none; border-top: 1px solid #E5E7EB; margin: 30px 0;">
+              
+              <p style="color: #6B7280; font-size: 12px;">
+                Merci de votre confiance,<br>
+                L'équipe AMAIR
+              </p>
+            </div>
+          `;
+
+          await transporter.sendMail({
+            from: `"${process.env.PLATFORM_NAME}" ${process.env.SMTP_FROM_EMAIL}`,
+            to: service.user.email,
+            subject: `Confirmation de paiement - ${service.nom} ${service.annee}`,
+            html: emailContent,
+          });
+
+          console.log(`✅ Paiement confirmé pour le service ${service._id}`);
+        }
+        
+        return res.json({ received: true });
+      }
+
+      // Traitement du paiement d'adhésion (code existant)
       const adhesion = await Adhesion.findById(session.metadata.adhesionId).populate(
         'user',
         'prenom nom email'
@@ -160,6 +353,16 @@ const handleStripeWebhook = asyncHandler(async (req, res) => {
         adhesion.paiement.stripePaymentIntentId = session.payment_intent;
         adhesion.status = 'actif';
         await adhesion.save();
+        
+        // Générer et uploader l'attestation d'adhésion
+        try {
+          const attestationResult = await generateAndUploadAttestation(adhesion);
+          adhesion.attestationKey = attestationResult.key;
+          adhesion.attestationUrl = attestationResult.url;
+          await adhesion.save();
+        } catch (attestationError) {
+          console.error('Erreur génération attestation:', attestationError);
+        }
         
         // Si adhésion SAR avec adhesionAMAIRGratuite, créer automatiquement l'adhésion AMAIR
         let adhesionAMAIRCreee = false;
@@ -193,6 +396,16 @@ const handleStripeWebhook = asyncHandler(async (req, res) => {
             await adhesionAMAIR.save();
             adhesionAMAIRCreee = true;
             console.log(`✅ Adhésion AMAIR gratuite créée automatiquement pour l'adhérent SAR ${adhesion.user._id}`);
+            
+            // Générer l'attestation pour l'adhésion AMAIR gratuite
+            try {
+              const attestationAMAIR = await generateAndUploadAttestation(adhesionAMAIR);
+              adhesionAMAIR.attestationKey = attestationAMAIR.key;
+              adhesionAMAIR.attestationUrl = attestationAMAIR.url;
+              await adhesionAMAIR.save();
+            } catch (attestationError) {
+              console.error('Erreur génération attestation AMAIR:', attestationError);
+            }
           } catch (error) {
             console.error('Erreur lors de la création de l\'adhésion AMAIR gratuite:', error);
           }
@@ -422,6 +635,7 @@ const requestPayment = asyncHandler(async (req, res) => {
   // Mettre à jour le statut
   adhesion.status = 'paiement_demande';
   adhesion.paiement.status = 'demande';
+  adhesion.paiement.dateEnvoiLien = new Date();
   await adhesion.save();
 
   // Envoyer automatiquement le lien de paiement
@@ -470,6 +684,200 @@ const requestPayment = asyncHandler(async (req, res) => {
   }
 });
 
+// @desc    Créer une session de paiement Stripe pour un service
+// @route   POST /api/payment/service/create-payment-session/:serviceId
+// @access  Private
+const createServicePaymentSession = asyncHandler(async (req, res) => {
+  const { serviceId } = req.params;
+
+  const service = await Service.findById(serviceId)
+    .populate('user', 'prenom nom email')
+    .populate('adhesion', 'organisme annee');
+
+  if (!service) {
+    res.status(404);
+    throw new Error('Service non trouvé');
+  }
+
+  // Vérifier que l'utilisateur est propriétaire
+  if (service.user._id.toString() !== req.user._id.toString()) {
+    res.status(403);
+    throw new Error('Non autorisé');
+  }
+
+  // Vérifier que le paiement n'a pas déjà été effectué
+  if (service.paiement.status === 'paye') {
+    res.status(400);
+    throw new Error('Ce service a déjà été payé');
+  }
+
+  // Le service miellerie est rattaché à l'AMAIR
+  const destinationAccount = process.env.STRIPE_ACCOUNT_AMAIR;
+
+  if (!destinationAccount) {
+    console.warn('⚠️  Compte Stripe AMAIR non configuré. Le paiement ira sur le compte principal.');
+  }
+
+  try {
+    const sessionConfig = {
+      payment_method_types: ['card'],
+      line_items: [
+        {
+          price_data: {
+            currency: 'eur',
+            product_data: {
+              name: `${service.nom} - ${service.annee}`,
+              description: `Droit d'usage annuel pour les services de la miellerie AMAIR`,
+            },
+            unit_amount: Math.round(service.paiement.montant * 100),
+          },
+          quantity: 1,
+        },
+      ],
+      mode: 'payment',
+      success_url: `${process.env.FRONTEND_URL}/dashboard?service_success=true&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${process.env.FRONTEND_URL}/dashboard?service_canceled=true`,
+      customer_email: service.user.email,
+      metadata: {
+        serviceId: service._id.toString(),
+        userId: service.user._id.toString(),
+        typeService: service.typeService,
+        type: 'service', // Pour différencier dans le webhook
+      },
+    };
+
+    // Ajouter le transfert automatique si un compte de destination est configuré
+    if (destinationAccount) {
+      sessionConfig.payment_intent_data = {
+        application_fee_amount: 0,
+        transfer_data: {
+          destination: destinationAccount,
+        },
+      };
+      console.log(`💸 Paiement service configuré pour transfert vers AMAIR (${destinationAccount})`);
+    }
+
+    const session = await stripe.checkout.sessions.create(sessionConfig);
+
+    // Enregistrer l'ID de session dans le service
+    await Service.updateOne(
+      { _id: serviceId },
+      {
+        $set: {
+          'paiement.stripeSessionId': session.id,
+          'paiement.status': 'en_attente',
+        },
+      }
+    );
+
+    res.json({
+      sessionId: session.id,
+      url: session.url,
+    });
+  } catch (error) {
+    console.error('Erreur création session Stripe service:', error);
+    res.status(500);
+    throw new Error(`Erreur Stripe: ${error.message || 'Erreur lors de la création de la session de paiement'}`);
+  }
+});
+
+// @desc    Marquer un paiement de service comme effectué manuellement (admin)
+// @route   POST /api/payment/service/mark-paid/:serviceId
+// @access  Private/Admin
+const markServicePaymentAsPaid = asyncHandler(async (req, res) => {
+  // Vérifier les permissions
+  if (req.user?.role !== 'super_admin') {
+    const permissions = await Permission.findOne({ userId: req.user._id });
+    if (!permissions?.adhesions?.changeAdherentStatus) {
+      res.status(403);
+      throw new Error('Accès refusé - Permission insuffisante');
+    }
+  }
+
+  const { serviceId } = req.params;
+  const { typePaiement, datePaiement, note } = req.body;
+
+  if (!typePaiement || !['cheque', 'en_ligne'].includes(typePaiement)) {
+    res.status(400);
+    throw new Error('Mode de paiement invalide (cheque ou en_ligne)');
+  }
+
+  if (!datePaiement) {
+    res.status(400);
+    throw new Error('La date de paiement est requise');
+  }
+
+  const service = await Service.findById(serviceId).populate('user', 'prenom nom email');
+
+  if (!service) {
+    res.status(404);
+    throw new Error('Service non trouvé');
+  }
+
+  if (service.paiement?.status === 'paye') {
+    res.status(400);
+    throw new Error('Ce service est déjà marqué comme payé');
+  }
+
+  service.paiement.status = 'paye';
+  service.paiement.typePaiement = typePaiement;
+  service.paiement.datePaiement = new Date(datePaiement);
+  if (note) service.paiement.note = note;
+
+  // Mettre à jour le statut global
+  if (service.caution.status === 'recu') {
+    service.status = 'actif';
+    service.dateValidation = new Date();
+  } else {
+    service.status = 'en_attente_caution';
+  }
+
+  await service.save();
+
+  res.json({
+    success: true,
+    service,
+  });
+});
+
+// @desc    Récupérer les infos d'un service pour le paiement
+// @route   GET /api/payment/service/:serviceId
+// @access  Private
+const getServiceForPayment = asyncHandler(async (req, res) => {
+  const { serviceId } = req.params;
+
+  const service = await Service.findById(serviceId)
+    .populate('user', 'prenom nom email')
+    .populate('adhesion', 'organisme annee');
+
+  if (!service) {
+    res.status(404);
+    throw new Error('Service non trouvé');
+  }
+
+  // Vérifier que l'utilisateur est propriétaire
+  if (service.user._id.toString() !== req.user._id.toString()) {
+    res.status(403);
+    throw new Error('Non autorisé');
+  }
+
+  res.json({
+    _id: service._id,
+    nom: service.nom,
+    typeService: service.typeService,
+    annee: service.annee,
+    montant: service.paiement.montant,
+    status: service.paiement.status,
+    typePaiement: service.paiement.typePaiement,
+    caution: service.caution,
+    user: {
+      prenom: service.user.prenom,
+      nom: service.user.nom,
+      email: service.user.email,
+    },
+  });
+});
+
 module.exports = {
   createPaymentSession,
   handleStripeWebhook,
@@ -477,4 +885,8 @@ module.exports = {
   getAdhesionForPayment,
   sendPaymentLink,
   requestPayment,
+  markPaymentAsPaid,
+  createServicePaymentSession,
+  markServicePaymentAsPaid,
+  getServiceForPayment,
 };

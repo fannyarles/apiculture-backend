@@ -1,5 +1,6 @@
 const User = require('../models/userModel');
 const Permission = require('../models/permissionModel');
+const { envoyerEmailBienvenueAdmin } = require('../services/emailService');
 
 // @desc    Get all admins
 // @route   GET /api/users/admins
@@ -18,13 +19,16 @@ const getAdmins = async (req, res) => {
 // @access  Super Admin
 const createAdmin = async (req, res) => {
   try {
-    const { prenom, nom, email, password, organismes, permissions } = req.body;
+    const { prenom, nom, email, password, organismes } = req.body;
 
     // Vérifier si l'email existe déjà
     const userExists = await User.findOne({ email });
     if (userExists) {
       return res.status(400).json({ message: 'Cet email est déjà utilisé' });
     }
+
+    // Sauvegarder le mot de passe en clair pour l'email (avant hachage)
+    const passwordClair = password;
 
     // Créer l'admin
     const admin = await User.create({
@@ -37,20 +41,24 @@ const createAdmin = async (req, res) => {
       organismes: organismes || [],
       // Garder organisme pour compatibilité (premier organisme du tableau)
       organisme: organismes && organismes.length > 0 ? organismes[0] : null,
-      permissions: permissions || {
-        communications: false,
-        blog: false,
-        adherents: false,
-        paiementLink: false,
-      },
     });
 
-    // Créer les permissions par défaut pour cet admin
+    // Créer les permissions par défaut pour cet admin dans le modèle Permission
+    let adminPermissions = null;
     try {
-      await Permission.createDefaultPermissions(admin._id, admin.role);
+      adminPermissions = await Permission.createDefaultPermissions(admin._id, admin.role);
     } catch (permError) {
       console.error('Erreur lors de la création des permissions:', permError);
       // Ne pas bloquer la création de l'admin si les permissions échouent
+    }
+
+    // Envoyer l'email de bienvenue avec les identifiants
+    try {
+      await envoyerEmailBienvenueAdmin(admin, passwordClair);
+      console.log(`📧 Email de bienvenue envoyé à ${admin.email}`);
+    } catch (emailError) {
+      console.error('Erreur lors de l\'envoi de l\'email de bienvenue:', emailError);
+      // Ne pas bloquer la création de l'admin si l'email échoue
     }
 
     res.status(201).json({
@@ -61,7 +69,7 @@ const createAdmin = async (req, res) => {
       role: admin.role,
       organisme: admin.organisme,
       organismes: admin.organismes,
-      permissions: admin.permissions,
+      permissions: adminPermissions,
     });
   } catch (error) {
     res.status(500).json({ message: 'Erreur lors de la création', error: error.message });
@@ -73,7 +81,7 @@ const createAdmin = async (req, res) => {
 // @access  Super Admin
 const updateAdmin = async (req, res) => {
   try {
-    const { prenom, nom, email, password, organismes, permissions } = req.body;
+    const { prenom, nom, email, password, organismes } = req.body;
 
     const admin = await User.findById(req.params.id);
     if (!admin || admin.role !== 'admin') {
@@ -87,7 +95,6 @@ const updateAdmin = async (req, res) => {
     admin.organismes = organismes !== undefined ? organismes : admin.organismes;
     // Garder organisme pour compatibilité (premier organisme du tableau)
     admin.organisme = organismes && organismes.length > 0 ? organismes[0] : null;
-    admin.permissions = permissions || admin.permissions;
 
     // Mettre à jour le mot de passe seulement s'il est fourni
     if (password) {
@@ -95,6 +102,9 @@ const updateAdmin = async (req, res) => {
     }
 
     await admin.save();
+
+    // Récupérer les permissions depuis le modèle Permission
+    const adminPermissions = await Permission.findOne({ userId: admin._id });
 
     res.json({
       _id: admin._id,
@@ -104,7 +114,7 @@ const updateAdmin = async (req, res) => {
       role: admin.role,
       organisme: admin.organisme,
       organismes: admin.organismes,
-      permissions: admin.permissions,
+      permissions: adminPermissions,
     });
   } catch (error) {
     res.status(500).json({ message: 'Erreur lors de la mise à jour', error: error.message });

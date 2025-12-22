@@ -3,7 +3,8 @@ const Adhesion = require('../models/adhesionModel');
 const Parametre = require('../models/parametreModel');
 const User = require('../models/userModel');
 const nodemailer = require('nodemailer');
-const { generateAndUploadAdhesionPDF } = require('../services/pdfService');
+const { generateAndUploadAdhesionPDF, generateAndUploadBulletinAdhesion } = require('../services/pdfService');
+const { getSignedUrl } = require('../services/s3Service');
 
 // Configuration du transporteur SMTP
 const transporter = nodemailer.createTransport({
@@ -23,7 +24,7 @@ const transporter = nodemailer.createTransport({
 // @route   POST /api/adhesions
 // @access  Private
 const createAdhesion = asyncHandler(async (req, res) => {
-  const {
+  let {
     organisme,
     annee,
     informationsApicoles,
@@ -31,7 +32,65 @@ const createAdhesion = asyncHandler(async (req, res) => {
     informationsSpecifiques,
     paiement,
     signature,
+    documents,
   } = req.body;
+
+  // Parser les champs complexes si ce sont des chaînes JSON
+  if (typeof documents === 'string') {
+    try {
+      documents = JSON.parse(documents);
+    } catch (error) {
+      console.error('Erreur parsing documents:', error);
+      documents = [];
+    }
+  }
+  
+  // Parser chaque élément du tableau documents s'il est une string
+  if (Array.isArray(documents)) {
+    documents = documents.map((doc, index) => {
+      if (typeof doc === 'string') {
+        try {
+          return JSON.parse(doc);
+        } catch (error) {
+          console.error(`Erreur parsing document[${index}]:`, error);
+          return null;
+        }
+      }
+      return doc;
+    }).filter(doc => doc !== null);
+  }
+  
+  if (typeof informationsApicoles === 'string') {
+    try {
+      informationsApicoles = JSON.parse(informationsApicoles);
+    } catch (error) {
+      console.error('Erreur parsing informationsApicoles:', error);
+    }
+  }
+  
+  if (typeof informationsPersonnelles === 'string') {
+    try {
+      informationsPersonnelles = JSON.parse(informationsPersonnelles);
+    } catch (error) {
+      console.error('Erreur parsing informationsPersonnelles:', error);
+    }
+  }
+  
+  if (typeof informationsSpecifiques === 'string') {
+    try {
+      informationsSpecifiques = JSON.parse(informationsSpecifiques);
+    } catch (error) {
+      console.error('Erreur parsing informationsSpecifiques:', error);
+    }
+  }
+  
+  if (typeof paiement === 'string') {
+    try {
+      paiement = JSON.parse(paiement);
+    } catch (error) {
+      console.error('Erreur parsing paiement:', error);
+    }
+  }
 
   // Extraire les informations apicoles
   const nombreRuches = informationsApicoles?.nombreRuches;
@@ -69,6 +128,7 @@ const createAdhesion = asyncHandler(async (req, res) => {
 
   // Calculer le montant selon l'organisme
   let montant = 0;
+  let statusInitial = 'en_attente';
   
   if (organisme === 'SAR') {
     // Vérifier si l'utilisateur a une adhésion active de l'année N-1
@@ -85,7 +145,84 @@ const createAdhesion = asyncHandler(async (req, res) => {
     
     montant = cotisationBase + droitEntree + cotisationRuches;
   } else if (organisme === 'AMAIR') {
-    montant = parametre.tarifs.AMAIR.base;
+    // Si l'utilisateur est adhérent SAR, l'adhésion AMAIR est gratuite et active directement
+    const isAdherentSAR = informationsSpecifiques?.AMAIR?.adherentSAR;
+    if (isAdherentSAR) {
+      montant = 0;
+      statusInitial = 'actif';
+    } else {
+      montant = parametre.tarifs.AMAIR.base;
+    }
+  }
+
+  // Traiter les documents uploadés (upload vers S3)
+  const { uploadFile } = require('../services/s3Service');
+  const uploadedDocuments = [];
+  
+  if (documents && Array.isArray(documents) && documents.length > 0) {
+    for (const doc of documents) {
+      // Vérifier que doc est un objet et non une string
+      if (typeof doc === 'string') {
+        console.warn('⚠️ Document reçu comme string, ignoré:', doc);
+        continue;
+      }
+      
+      if (doc.base64Data && doc.isTemporary) {
+        try {
+          // Extraire les données base64
+          const base64Data = doc.base64Data.split(',')[1] || doc.base64Data;
+          const buffer = Buffer.from(base64Data, 'base64');
+          
+          // Définir le chemin S3
+          const folder = `documents-adhesions/${annee}/${organisme}`;
+          const fileName = `${doc.type}-${req.user._id}-${Date.now()}`;
+          
+          // Upload vers S3
+          const uploadResult = await uploadFile(buffer, fileName, folder, doc.mimeType);
+          
+          uploadedDocuments.push({
+            nom: doc.nom,
+            nomOriginal: doc.nomOriginal,
+            type: doc.type,
+            organisme: doc.organisme,
+            mimeType: doc.mimeType,
+            taille: doc.taille,
+            s3Key: uploadResult.key,
+            url: uploadResult.url,
+            uploadDate: new Date()
+          });
+          
+          console.log(`✅ Document uploadé: ${doc.nomOriginal}`);
+        } catch (error) {
+          console.error(`Erreur upload document ${doc.nomOriginal}:`, error);
+          // Ne pas bloquer la création si un document échoue
+        }
+      } else if (!doc.isTemporary && doc.s3Key) {
+        // Document déjà uploadé, juste l'ajouter
+        uploadedDocuments.push({
+          nom: doc.nom,
+          nomOriginal: doc.nomOriginal,
+          type: doc.type,
+          organisme: doc.organisme,
+          mimeType: doc.mimeType,
+          taille: doc.taille,
+          s3Key: doc.s3Key,
+          url: doc.url,
+          uploadDate: doc.uploadDate || new Date()
+        });
+        console.log(`✅ Document existant ajouté: ${doc.nomOriginal}`);
+      }
+    }
+  }
+
+  // Log pour déboguer uploadedDocuments avant création
+  console.log('📦 uploadedDocuments avant Adhesion.create():', JSON.stringify(uploadedDocuments, null, 2));
+  console.log('📦 Type de uploadedDocuments:', typeof uploadedDocuments);
+  console.log('📦 Est un array:', Array.isArray(uploadedDocuments));
+  if (Array.isArray(uploadedDocuments)) {
+    uploadedDocuments.forEach((doc, index) => {
+      console.log(`📦 uploadedDocuments[${index}] type:`, typeof doc);
+    });
   }
 
   // Créer l'adhésion avec toutes les informations
@@ -118,16 +255,50 @@ const createAdhesion = asyncHandler(async (req, res) => {
     signature,
     paiement: {
       montant,
-      typePaiement: paiement?.typePaiement,
-      status: 'non_demande',
+      typePaiement: paiement?.typePaiement || (montant === 0 ? 'gratuit' : undefined),
+      status: montant === 0 ? 'paye' : 'non_demande',
+      datePaiement: montant === 0 ? new Date() : undefined,
     },
-    status: 'en_attente',
+    status: statusInitial,
+    dateValidation: statusInitial === 'actif' ? new Date() : undefined,
+    documents: uploadedDocuments,
   });
 
   const populatedAdhesion = await Adhesion.findById(adhesion._id).populate(
     'user',
-    'prenom nom email'
+    'prenom nom email telephone adresse dateNaissance'
   );
+
+  // Générer et uploader le bulletin d'adhésion
+  try {
+    const bulletinResult = await generateAndUploadBulletinAdhesion(populatedAdhesion);
+    
+    // Mettre à jour l'adhésion avec les informations du bulletin
+    populatedAdhesion.bulletinKey = bulletinResult.key;
+    populatedAdhesion.bulletinUrl = bulletinResult.url;
+    await populatedAdhesion.save();
+    
+    console.log(`✅ Bulletin d'adhésion généré pour ${populatedAdhesion._id}`);
+  } catch (error) {
+    console.error('Erreur génération bulletin:', error);
+    // Ne pas bloquer la création de l'adhésion si la génération du bulletin échoue
+  }
+
+  // Si l'adhésion est active (adhérent SAR pour AMAIR), générer l'attestation
+  if (statusInitial === 'actif') {
+    try {
+      const { generateAndUploadAttestation } = require('../services/pdfService');
+      const attestationResult = await generateAndUploadAttestation(populatedAdhesion);
+      
+      populatedAdhesion.attestationKey = attestationResult.key;
+      populatedAdhesion.attestationUrl = attestationResult.url;
+      await populatedAdhesion.save();
+      
+      console.log(`✅ Attestation d'adhésion générée pour ${populatedAdhesion._id}`);
+    } catch (error) {
+      console.error('Erreur génération attestation:', error);
+    }
+  }
 
   res.status(201).json(populatedAdhesion);
 });
@@ -244,6 +415,7 @@ const requestPayment = asyncHandler(async (req, res) => {
   // Mettre à jour le statut
   adhesion.paiement.status = 'demande';
   adhesion.status = 'paiement_demande';
+  adhesion.paiement.dateEnvoiLien = new Date();
   adhesion.dateValidation = new Date();
   await adhesion.save();
 
@@ -470,6 +642,45 @@ const generateAdhesionPDFController = asyncHandler(async (req, res) => {
   }
 });
 
+// @desc    Télécharger l'attestation d'adhésion
+// @route   GET /api/adhesions/:id/attestation
+// @access  Private (user propriétaire ou admin)
+const downloadAttestation = asyncHandler(async (req, res) => {
+  const adhesion = await Adhesion.findById(req.params.id).populate('user', '_id');
+
+  if (!adhesion) {
+    res.status(404);
+    throw new Error('Adhésion non trouvée');
+  }
+
+  // Vérifier que l'utilisateur est propriétaire ou admin
+  if (adhesion.user._id.toString() !== req.user._id.toString() && !['admin', 'super_admin'].includes(req.user.role)) {
+    res.status(403);
+    throw new Error('Non autorisé');
+  }
+
+  // Vérifier que l'attestation existe
+  if (!adhesion.attestationKey) {
+    res.status(404);
+    throw new Error('Attestation non disponible - l\'adhésion doit être active');
+  }
+
+  try {
+    // Générer une URL signée valide 1 heure
+    const signedUrl = await getSignedUrl(adhesion.attestationKey, 3600);
+    
+    res.json({
+      success: true,
+      url: signedUrl,
+      filename: `attestation-${adhesion.organisme}-${adhesion.annee}.pdf`
+    });
+  } catch (error) {
+    console.error('Erreur génération URL signée:', error);
+    res.status(500);
+    throw new Error('Erreur lors de la génération du lien de téléchargement');
+  }
+});
+
 module.exports = {
   createAdhesion,
   getMyAdhesions,
@@ -480,5 +691,6 @@ module.exports = {
   deleteAdhesion,
   getStats,
   generateAdhesionPDFController,
+  downloadAttestation,
   sendHelpRequest,
 };

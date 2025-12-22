@@ -33,9 +33,13 @@ const uploadFile = async (fileBuffer, fileName, mimeType, folder = 'documents') 
 
   try {
     const result = await s3.upload(params).promise();
+    
+    // Générer une URL signée valide pour 7 jours (604800 secondes)
+    const signedUrl = await getSignedUrl(result.Key, 604800);
+    
     return {
       key: result.Key,
-      url: result.Location,
+      url: signedUrl,
       bucket: result.Bucket
     };
   } catch (error) {

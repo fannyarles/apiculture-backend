@@ -11,6 +11,7 @@ const {
   getStats,
   sendHelpRequest,
   generateAdhesionPDFController,
+  downloadAttestation,
 } = require('../controllers/adhesionController');
 const { protect, admin } = require('../middleware/authMiddleware');
 
@@ -33,6 +34,7 @@ router.get('/', protect, async (req, res, next) => {
 router.get('/:id', protect, getAdhesionById);
 router.post('/:id/demande-aide', protect, sendHelpRequest);
 router.post('/:id/generate-pdf', protect, generateAdhesionPDFController);
+router.get('/:id/attestation', protect, downloadAttestation);
 
 // Routes admin
 router.put('/:id/status', protect, admin, updateAdhesionStatus);

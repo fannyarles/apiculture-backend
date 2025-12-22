@@ -3,6 +3,7 @@ const asyncHandler = require('express-async-handler');
 const crypto = require('crypto');
 const nodemailer = require('nodemailer');
 const User = require('../models/userModel');
+const Permission = require('../models/permissionModel');
 
 // Configuration du transporteur SMTP pour les emails
 const transporter = nodemailer.createTransport({
@@ -98,6 +99,16 @@ const loginUser = asyncHandler(async (req, res) => {
   }
 
   if (user && (await user.matchPassword(password))) {
+    // Charger les permissions depuis le modèle Permission
+    let permissions = null;
+    if (user.role === 'admin' || user.role === 'super_admin') {
+      permissions = await Permission.findOne({ userId: user._id });
+      if (!permissions) {
+        // Créer des permissions par défaut si elles n'existent pas
+        permissions = await Permission.createDefaultPermissions(user._id, user.role);
+      }
+    }
+
     res.json({
       _id: user._id,
       prenom: user.prenom,
@@ -109,7 +120,7 @@ const loginUser = asyncHandler(async (req, res) => {
       roles: user.roles,
       organisme: user.organisme,
       organismes: user.organismes,
-      permissions: user.permissions,
+      permissions: permissions,
       token: generateToken(user._id),
     });
   } else {
@@ -125,6 +136,16 @@ const getUserProfile = asyncHandler(async (req, res) => {
   const user = await User.findById(req.user._id).select('-password');
 
   if (user) {
+    // Charger les permissions depuis le modèle Permission
+    let permissions = null;
+    if (user.role === 'admin' || user.role === 'super_admin') {
+      permissions = await Permission.findOne({ userId: user._id });
+      if (!permissions) {
+        // Créer des permissions par défaut si elles n'existent pas
+        permissions = await Permission.createDefaultPermissions(user._id, user.role);
+      }
+    }
+
     // Retourner le format attendu par le frontend avec mapping des champs
     res.json({
       _id: user._id,
@@ -138,7 +159,7 @@ const getUserProfile = asyncHandler(async (req, res) => {
       roles: user.roles,
       organisme: user.organisme,
       organismes: user.organismes,
-      permissions: user.permissions,
+      permissions: permissions,
       isActive: user.isActive,
       // Ajouter personalInfo avec mapping pour compatibilité frontend
       personalInfo: {

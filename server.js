@@ -54,6 +54,8 @@ app.use('/api/users', require('./routes/superAdminRoutes'));
 console.log('  ✅ /api/users');
 app.use('/api/permissions', require('./routes/permissionRoutes'));
 console.log('  ✅ /api/permissions');
+app.use('/api/services', require('./routes/serviceRoutes'));
+console.log('  ✅ /api/services');
 
 // Servir les fichiers statiques pour les uploads
 app.use('/uploads', express.static('uploads'));

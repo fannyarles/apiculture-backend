@@ -25,6 +25,11 @@ const permissionSchema = mongoose.Schema(
         default: false,
         description: 'Gérer les adhésions (créer, modifier, supprimer)',
       },
+      changeAdherentStatus: {
+        type: Boolean,
+        default: false,
+        description: 'Changer le statut de l\'adhérent et marquer les paiements comme effectués',
+      },
       exportData: {
         type: Boolean,
         default: false,
@@ -139,6 +144,7 @@ permissionSchema.statics.createDefaultPermissions = async function (userId, role
       access: true,
       sendPaymentLink: false,
       manageAdhesions: false,
+      changeAdherentStatus: false,
       exportData: false,
     },
     communications: {

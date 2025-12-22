@@ -57,7 +57,7 @@ const adhesionSchema = mongoose.Schema(
       },
       typePaiement: {
         type: String,
-        enum: ['cheque', 'en_ligne'],
+        enum: ['cheque', 'espece', 'en_ligne', 'gratuit'],
         required: false,
       },
       status: {
@@ -65,8 +65,14 @@ const adhesionSchema = mongoose.Schema(
         enum: ['non_demande', 'demande', 'paye', 'refuse'],
         default: 'non_demande',
       },
+      dateEnvoiLien: {
+        type: Date,
+      },
       datePaiement: {
         type: Date,
+      },
+      note: {
+        type: String,
       },
       stripeSessionId: {
         type: String,
@@ -94,11 +100,25 @@ const adhesionSchema = mongoose.Schema(
       type: String,
       required: false,
     },
-    // PDF signé
+    // PDF signé (récapitulatif)
     pdfKey: {
       type: String,
     },
     pdfUrl: {
+      type: String,
+    },
+    // Attestation d'adhésion
+    attestationKey: {
+      type: String,
+    },
+    attestationUrl: {
+      type: String,
+    },
+    // Bulletin d'adhésion
+    bulletinKey: {
+      type: String,
+    },
+    bulletinUrl: {
       type: String,
     },
     // Informations personnelles (snapshot au moment de l'adhésion)
@@ -123,6 +143,11 @@ const adhesionSchema = mongoose.Schema(
     adhesionAMAIRGratuite: {
       type: Boolean,
       default: false,
+    },
+    // Documents uploadés par l'adhérent
+    documents: {
+      type: mongoose.Schema.Types.Mixed,
+      default: []
     },
   },
   {
