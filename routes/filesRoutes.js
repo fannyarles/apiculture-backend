@@ -208,4 +208,67 @@ router.get('/adhesion/:adhesionId', protect, asyncHandler(async (req, res) => {
   res.json(files);
 }));
 
+// @desc    Télécharger un fichier par sa clé S3 (téléchargement direct)
+// @route   GET /api/files/download/:s3Key
+// @access  Private
+router.get('/download/:s3Key(*)', protect, asyncHandler(async (req, res) => {
+  const s3Key = req.params.s3Key;
+  
+  // Récupérer les métadonnées depuis MongoDB par la clé S3
+  const file = await File.findOne({ s3Key: s3Key, statut: 'actif' });
+
+  if (!file) {
+    res.status(404);
+    throw new Error('Fichier non trouvé');
+  }
+
+  // Vérifier les permissions
+  const isOwner = file.uploadedBy.toString() === req.user._id.toString();
+  const isAdmin = ['admin', 'super_admin'].includes(req.user.role);
+  
+  if (!isOwner && !isAdmin) {
+    // Vérifier si l'utilisateur est propriétaire de l'adhésion liée
+    if (file.adhesion) {
+      const Adhesion = require('../models/adhesionModel');
+      const adhesion = await Adhesion.findById(file.adhesion);
+      if (adhesion && adhesion.user.toString() === req.user._id.toString()) {
+        // OK, l'utilisateur est propriétaire de l'adhésion
+      } else {
+        res.status(403);
+        throw new Error('Non autorisé à accéder à ce fichier');
+      }
+    } else if (file.service) {
+      // Vérifier si l'utilisateur est propriétaire du service lié
+      const Service = require('../models/serviceModel');
+      const service = await Service.findById(file.service);
+      if (service && service.user.toString() === req.user._id.toString()) {
+        // OK, l'utilisateur est propriétaire du service
+      } else {
+        res.status(403);
+        throw new Error('Non autorisé à accéder à ce fichier');
+      }
+    } else {
+      res.status(403);
+      throw new Error('Non autorisé à accéder à ce fichier');
+    }
+  }
+
+  try {
+    // Télécharger le fichier depuis S3
+    const fileBuffer = await s3Service.downloadFile(s3Key);
+
+    // Définir les headers pour le téléchargement
+    res.setHeader('Content-Type', file.mimeType);
+    res.setHeader('Content-Disposition', `attachment; filename="${file.nomOriginal}"`);
+    res.setHeader('Content-Length', file.taille);
+
+    // Envoyer le fichier
+    res.send(fileBuffer);
+  } catch (error) {
+    console.error('Erreur téléchargement fichier:', error);
+    res.status(500);
+    throw new Error('Erreur lors du téléchargement du fichier');
+  }
+}));
+
 module.exports = router;

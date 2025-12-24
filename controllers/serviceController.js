@@ -235,6 +235,7 @@ const updateCautionStatus = asyncHandler(async (req, res) => {
   }
 
   // Mettre à jour le statut global du service
+  const wasNotActive = service.status !== 'actif';
   if (status === 'recu' && service.paiement.status === 'paye') {
     service.status = 'actif';
     service.dateValidation = new Date();
@@ -243,6 +244,21 @@ const updateCautionStatus = asyncHandler(async (req, res) => {
   }
 
   await service.save();
+
+  // Générer l'attestation si le service vient de passer en actif
+  if (wasNotActive && service.status === 'actif') {
+    try {
+      const { generateAndUploadServiceAttestation } = require('../services/pdfService');
+      const populatedService = await Service.findById(service._id)
+        .populate('user', 'prenom nom email telephone adresse');
+      const attestationResult = await generateAndUploadServiceAttestation(populatedService);
+      service.attestationKey = attestationResult.key;
+      service.attestationUrl = attestationResult.url;
+      await service.save();
+    } catch (attestationError) {
+      console.error('Erreur génération attestation service:', attestationError);
+    }
+  }
 
   res.json({
     success: true,
@@ -254,12 +270,8 @@ const updateCautionStatus = asyncHandler(async (req, res) => {
 // @route   GET /api/services/admin/miellerie-status
 // @access  Private/Admin
 const getMiellerieStatusByAdhesion = asyncHandler(async (req, res) => {
-  const { annee } = req.query;
-  const currentYear = annee ? parseInt(annee) : new Date().getFullYear();
-
   let filter = {
     typeService: 'miellerie',
-    annee: currentYear,
   };
 
   // Filtrer par organisme selon les droits de l'admin
@@ -270,18 +282,19 @@ const getMiellerieStatusByAdhesion = asyncHandler(async (req, res) => {
 
   const services = await Service.find(filter)
     .populate('user', '_id')
-    .select('user status caution.status');
+    .select('user annee status caution.status');
 
-  // Créer un map pour accès rapide
-  const servicesByUser = {};
+  // Créer un map indexé par {userId}_{annee} pour correspondre à chaque adhésion
+  const servicesByUserAndYear = {};
   services.forEach(service => {
-    servicesByUser[service.user._id.toString()] = {
+    const key = `${service.user._id.toString()}_${service.annee}`;
+    servicesByUserAndYear[key] = {
       status: service.status,
       cautionStatus: service.caution.status,
     };
   });
 
-  res.json(servicesByUser);
+  res.json(servicesByUserAndYear);
 });
 
 // @desc    Récupérer l'adresse de l'AMAIR pour l'envoi du chèque de caution

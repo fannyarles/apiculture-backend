@@ -97,6 +97,13 @@ const serviceSchema = mongoose.Schema(
     dateValidation: {
       type: Date,
     },
+    // Attestation de souscription au service
+    attestationKey: {
+      type: String,
+    },
+    attestationUrl: {
+      type: String,
+    },
     // Informations personnelles (snapshot au moment de la souscription)
     informationsPersonnelles: {
       nom: String,

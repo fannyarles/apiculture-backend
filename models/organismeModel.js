@@ -14,6 +14,11 @@ const organismeSchema = new mongoose.Schema(
       uppercase: true,
       trim: true,
     },
+    typeOrganisme: {
+      type: String,
+      enum: ['association', 'syndicat'],
+      required: [true, 'Le type d\'organisme est requis'],
+    },
     adresse: {
       rue: {
         type: String,
@@ -55,11 +60,6 @@ const organismeSchema = new mongoose.Schema(
     // Informations complémentaires
     siret: {
       type: String,
-    },
-    president: {
-      nom: String,
-      email: String,
-      telephone: String,
     },
     // Statistiques
     nombreAdherents: {

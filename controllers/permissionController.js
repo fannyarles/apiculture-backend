@@ -149,6 +149,15 @@ const getPermissionsStructure = asyncHandler(async (req, res) => {
         { key: 'viewStats', label: 'Voir les statistiques', description: 'Consulter les statistiques globales' },
       ],
     },
+    gestionActivite: {
+      label: 'Gestion de l\'activité',
+      icon: 'BuildingLibraryIcon',
+      permissions: [
+        { key: 'access', label: 'Accès au module', description: 'Accéder au module de gestion de l\'activité' },
+        { key: 'modifierInfosStatutaires', label: 'Modifier les informations statutaires', description: 'Gérer la composition du conseil et du bureau des organismes' },
+        { key: 'consulterCompositions', label: 'Consulter les compositions précédentes', description: 'Accéder à l\'historique des compositions archivées (PDF)' },
+      ],
+    },
   };
 
   res.json(structure);

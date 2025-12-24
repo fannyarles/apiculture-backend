@@ -11,6 +11,7 @@ const {
   createServicePaymentSession,
   markServicePaymentAsPaid,
   getServiceForPayment,
+  getPendingPayments,
 } = require('../controllers/paymentController');
 const { protect, admin } = require('../middleware/authMiddleware');
 
@@ -22,6 +23,7 @@ router.get('/adhesion/:adhesionId', protect, getAdhesionForPayment);
 router.post('/send-link/:adhesionId', protect, admin, sendPaymentLink);
 router.post('/request-payment', protect, admin, requestPayment);
 router.post('/mark-paid/:adhesionId', protect, admin, markPaymentAsPaid);
+router.get('/pending', protect, admin, getPendingPayments);
 
 // Routes de paiement pour les services
 router.post('/service/create-payment-session/:serviceId', protect, createServicePaymentSession);

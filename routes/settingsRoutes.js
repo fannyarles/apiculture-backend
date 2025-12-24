@@ -108,42 +108,50 @@ router.put('/:organisme/:annee/tarifs', protect, admin, asyncHandler(async (req,
 // @access  Private/Admin
 router.get('/statistiques', protect, admin, asyncHandler(async (req, res) => {
   const anneeActuelle = new Date().getFullYear();
+  const anneeSelectionnee = req.query.annee ? parseInt(req.query.annee) : anneeActuelle;
 
-  // Compter les adhésions par statut
-  const totalAdhesions = await Adhesion.countDocuments({ annee: anneeActuelle });
-  const adhesionsEnCours = await Adhesion.countDocuments({ 
-    annee: anneeActuelle,
-    status: 'en_cours' 
-  });
-  const adhesionsValidees = await Adhesion.countDocuments({ 
-    annee: anneeActuelle,
-    status: 'actif' 
-  });
-  const adhesionsAttentePaiement = await Adhesion.countDocuments({ 
-    annee: anneeActuelle,
-    status: 'en_attente' 
-  });
+  // Fonction pour obtenir les stats par organisme pour une année donnée
+  const getStatsParOrganisme = async (annee) => {
+    const stats = await Adhesion.aggregate([
+      { $match: { annee: annee } },
+      {
+        $group: {
+          _id: '$organisme',
+          total: { $sum: 1 },
+          actifs: {
+            $sum: { $cond: [{ $eq: ['$status', 'actif'] }, 1, 0] }
+          },
+          enCours: {
+            $sum: { $cond: [{ $in: ['$status', ['en_attente', 'en_cours']] }, 1, 0] }
+          },
+          attentePaiement: {
+            $sum: { $cond: [{ $eq: ['$status', 'paiement_demande'] }, 1, 0] }
+          }
+        }
+      }
+    ]);
+    return stats;
+  };
 
-  // Compter par organisme
-  const adhesionsSAR = await Adhesion.countDocuments({ 
-    annee: anneeActuelle,
-    organismes: 'SAR' 
-  });
-  const adhesionsAMAIR = await Adhesion.countDocuments({ 
-    annee: anneeActuelle,
-    organismes: 'AMAIR' 
+  // Obtenir les années disponibles (années où il y a des adhésions)
+  const anneesDisponibles = await Adhesion.distinct('annee');
+  anneesDisponibles.sort((a, b) => b - a); // Tri décroissant
+
+  // Obtenir les stats pour l'année sélectionnée
+  const statsAnnee = await getStatsParOrganisme(anneeSelectionnee);
+
+  // Vérifier si les adhésions pour l'année suivante sont ouvertes
+  const parametreSuivant = await Parametre.findOne({ 
+    annee: anneeActuelle + 1, 
+    adhesionsOuvertes: true 
   });
 
   res.json({
-    annee: anneeActuelle,
-    total: totalAdhesions,
-    enCours: adhesionsEnCours,
-    validees: adhesionsValidees,
-    attentePaiement: adhesionsAttentePaiement,
-    parOrganisme: {
-      SAR: adhesionsSAR,
-      AMAIR: adhesionsAMAIR
-    }
+    anneeActuelle,
+    anneeSelectionnee,
+    anneesDisponibles,
+    stats: statsAnnee,
+    adhesionsSuivantesOuvertes: !!parametreSuivant
   });
 }));
 

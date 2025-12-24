@@ -630,11 +630,217 @@ const generateAndUploadBulletinAdhesion = async (adhesion) => {
   }
 };
 
+/**
+ * Génère une attestation de souscription à un service
+ * @param {Object} service - Le service complet (avec user)
+ * @returns {Promise<Buffer>} - Le PDF en buffer
+ */
+const generateServiceAttestationPDF = async (service) => {
+  return new Promise(async (resolve, reject) => {
+    try {
+      const doc = new PDFDocument({
+        size: 'A4',
+        margins: { top: 50, bottom: 50, left: 50, right: 50 }
+      });
+
+      const buffers = [];
+      doc.on('data', buffers.push.bind(buffers));
+      doc.on('end', () => {
+        const pdfBuffer = Buffer.concat(buffers);
+        resolve(pdfBuffer);
+      });
+      doc.on('error', reject);
+
+      // En-tête avec logo/titre
+      doc.fontSize(28)
+         .font('Helvetica-Bold')
+         .fillColor('#2563eb')
+         .text('ASSOCIATION MAISON DE L\'APICULTURE', { align: 'center' });
+      
+      doc.moveDown(0.5);
+      doc.fontSize(12)
+         .fillColor('#000000')
+         .font('Helvetica')
+         .text('DE L\'ÎLE DE LA RÉUNION (AMAIR)', { align: 'center' });
+      
+      doc.moveDown(3);
+
+      // Titre du document
+      doc.fontSize(24)
+         .font('Helvetica-Bold')
+         .fillColor('#1e40af')
+         .text('ATTESTATION DE SOUSCRIPTION', { align: 'center' });
+      
+      doc.moveDown(0.3);
+      doc.fontSize(18)
+         .fillColor('#d97706')
+         .text(service.nom.toUpperCase(), { align: 'center' });
+      
+      doc.moveDown(0.5);
+      doc.fontSize(14)
+         .fillColor('#000000')
+         .font('Helvetica')
+         .text(`Année ${service.annee}`, { align: 'center' });
+      
+      doc.moveDown(3);
+
+      // Corps de l'attestation
+      doc.fontSize(12)
+         .font('Helvetica');
+
+      const user = service.user;
+      const nomComplet = `${user.prenom} ${user.nom}`;
+      
+      doc.text('Le présent document atteste que :', { align: 'left' });
+      doc.moveDown(1);
+
+      // Informations de l'adhérent en encadré
+      const boxY = doc.y;
+      doc.rect(50, boxY, 495, 120)
+         .stroke('#2563eb');
+      
+      doc.fontSize(14)
+         .font('Helvetica-Bold')
+         .text(nomComplet.toUpperCase(), 70, boxY + 20);
+      
+      doc.fontSize(11)
+         .font('Helvetica');
+      
+      const infos = service.informationsPersonnelles || user;
+      
+      if (infos.adresse?.rue) {
+        doc.text(`${infos.adresse.rue}`, 70, boxY + 45);
+      }
+      if (infos.adresse?.codePostal && infos.adresse?.ville) {
+        doc.text(`${infos.adresse.codePostal} ${infos.adresse.ville}`, 70, boxY + 60);
+      }
+      
+      doc.text(`Email : ${infos.email || user.email}`, 70, boxY + 80);
+      if (infos.telephone || user.telephone) {
+        doc.text(`Téléphone : ${infos.telephone || user.telephone}`, 70, boxY + 95);
+      }
+
+      doc.y = boxY + 140;
+      doc.moveDown(1);
+
+      // Texte d'attestation
+      doc.fontSize(12)
+         .font('Helvetica');
+      
+      doc.text(`a souscrit au service "${service.nom}" de l'Association de la Maison de l'Apiculture de l'Île de la Réunion (AMAIR) pour l'année ${service.annee}.`, {
+        align: 'left',
+        continued: false
+      });
+
+      doc.moveDown(1.5);
+
+      // Informations sur le service
+      doc.fontSize(11)
+         .font('Helvetica-Bold')
+         .text('Détails de la souscription :');
+      
+      doc.moveDown(0.5);
+      doc.font('Helvetica');
+      doc.text(`• Droit d'usage : ${service.paiement?.montant} €`);
+      doc.text(`• Caution déposée : ${service.caution?.montant} €`);
+      doc.text(`• Date de validation : ${new Date(service.dateValidation || service.createdAt).toLocaleDateString('fr-FR', { 
+        day: '2-digit', 
+        month: 'long', 
+        year: 'numeric' 
+      })}`);
+
+      doc.moveDown(2);
+
+      // Note sur la caution
+      doc.fontSize(10)
+         .font('Helvetica-Oblique')
+         .fillColor('#666666')
+         .text('Note : Le chèque de caution sera conservé et restitué en fin d\'année, sauf en cas de dégradation du matériel.', {
+           align: 'left'
+         });
+
+      doc.moveDown(2);
+
+      // Signature et cachet
+      doc.fontSize(11)
+         .fillColor('#000000')
+         .font('Helvetica-Oblique')
+         .text('Fait à Saint-Denis, La Réunion', { align: 'right' });
+      doc.text(`Le ${new Date().toLocaleDateString('fr-FR', { 
+        day: '2-digit', 
+        month: 'long', 
+        year: 'numeric' 
+      })}`, { align: 'right' });
+
+      doc.moveDown(2);
+      doc.font('Helvetica')
+         .text('Le Président de l\'AMAIR', { align: 'right' });
+
+      // Pied de page
+      doc.fontSize(8)
+         .font('Helvetica-Oblique')
+         .fillColor('#666666')
+         .text(
+           `Document généré automatiquement le ${new Date().toLocaleDateString('fr-FR')} - Référence: ${service._id}`,
+           50,
+           750,
+           { align: 'center', width: 495 }
+         );
+
+      doc.end();
+    } catch (error) {
+      reject(error);
+    }
+  });
+};
+
+/**
+ * Génère et upload l'attestation de souscription au service sur S3
+ * @param {Object} service - Le service complet
+ * @returns {Promise<Object>} - Informations du fichier uploadé
+ */
+const generateAndUploadServiceAttestation = async (service) => {
+  try {
+    const File = require('../models/fileModel');
+    
+    // Générer le PDF d'attestation
+    const pdfBuffer = await generateServiceAttestationPDF(service);
+
+    // Définir le chemin S3 dans le dossier attestations-services
+    const folder = `attestations-services/${service.annee}`;
+    const fileName = `attestation-service-${service.typeService}-${service._id}.pdf`;
+
+    // Upload sur S3
+    const result = await uploadFile(pdfBuffer, fileName, 'application/pdf', folder);
+
+    // Créer une entrée dans la collection File
+    await File.create({
+      nom: `Attestation ${service.nom} ${service.annee}`,
+      nomOriginal: fileName,
+      s3Key: result.key,
+      s3Bucket: process.env.S3_BUCKET_NAME,
+      mimeType: 'application/pdf',
+      taille: pdfBuffer.length,
+      type: 'attestation_service',
+      organisme: service.organisme,
+      service: service._id,
+      uploadedBy: service.user._id || service.user
+    });
+
+    return result;
+  } catch (error) {
+    console.error('Erreur génération/upload attestation service:', error);
+    throw new Error('Erreur lors de la génération de l\'attestation de service');
+  }
+};
+
 module.exports = {
   generateAdhesionPDF,
   generateAndUploadAdhesionPDF,
   generateAttestationPDF,
   generateAndUploadAttestation,
   generateBulletinAdhesionPDF,
-  generateAndUploadBulletinAdhesion
+  generateAndUploadBulletinAdhesion,
+  generateServiceAttestationPDF,
+  generateAndUploadServiceAttestation
 };

@@ -82,6 +82,40 @@ const userSchema = mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    rolesStatutaires: [{
+      organisme: {
+        type: String,
+        enum: ['SAR', 'AMAIR'],
+        required: true,
+      },
+      titre: {
+        type: String,
+        enum: [
+          'membre du conseil syndical',
+          'membre du bureau',
+          'membre du conseil d\'administration',
+          'membre coopté',
+        ],
+        required: true,
+      },
+      fonction: {
+        type: String,
+        enum: [
+          'président',
+          'vice-président',
+          'secrétaire',
+          'secrétaire-adjoint',
+          'trésorier',
+          'trésorier-adjoint',
+          null,
+        ],
+        default: null,
+      },
+      dateDebut: {
+        type: Date,
+        default: Date.now,
+      },
+    }],
     resetPasswordToken: {
       type: String,
       required: false,

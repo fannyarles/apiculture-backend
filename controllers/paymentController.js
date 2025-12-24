@@ -290,6 +290,19 @@ const handleStripeWebhook = asyncHandler(async (req, res) => {
           
           await service.save();
 
+          // Générer l'attestation si le service est actif
+          if (service.status === 'actif') {
+            try {
+              const { generateAndUploadServiceAttestation } = require('../services/pdfService');
+              const attestationResult = await generateAndUploadServiceAttestation(service);
+              service.attestationKey = attestationResult.key;
+              service.attestationUrl = attestationResult.url;
+              await service.save();
+            } catch (attestationError) {
+              console.error('Erreur génération attestation service:', attestationError);
+            }
+          }
+
           // Envoyer email de confirmation
           const emailContent = `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -367,47 +380,56 @@ const handleStripeWebhook = asyncHandler(async (req, res) => {
         // Si adhésion SAR avec adhesionAMAIRGratuite, créer automatiquement l'adhésion AMAIR
         let adhesionAMAIRCreee = false;
         if (adhesion.organisme === 'SAR' && adhesion.adhesionAMAIRGratuite) {
-          try {
-            const adhesionAMAIR = new Adhesion({
-              user: adhesion.user._id,
-              organisme: 'AMAIR',
-              annee: adhesion.annee,
-              napi: adhesion.napi,
-              numeroAmexa: adhesion.numeroAmexa,
-              nombreRuches: adhesion.nombreRuches,
-              nombreRuchers: adhesion.nombreRuchers,
-              localisation: adhesion.localisation,
-              siret: adhesion.siret,
-              paiement: {
-                montant: 0,
-                typePaiement: 'gratuit',
-                status: 'paye',
-                datePaiement: new Date(),
-              },
-              status: 'actif',
-              dateValidation: new Date(),
-              informationsPersonnelles: adhesion.informationsPersonnelles,
-              informationsSpecifiques: {
-                AMAIR: {
-                  adherentSAR: true
-                }
-              },
-            });
-            await adhesionAMAIR.save();
-            adhesionAMAIRCreee = true;
-            console.log(`✅ Adhésion AMAIR gratuite créée automatiquement pour l'adhérent SAR ${adhesion.user._id}`);
-            
-            // Générer l'attestation pour l'adhésion AMAIR gratuite
+          // Vérifier qu'il n'existe pas déjà une adhésion AMAIR pour cette année
+          const existingAMAIR = await Adhesion.findOne({
+            user: adhesion.user._id,
+            organisme: 'AMAIR',
+            annee: adhesion.annee,
+          });
+
+          if (!existingAMAIR) {
             try {
-              const attestationAMAIR = await generateAndUploadAttestation(adhesionAMAIR);
-              adhesionAMAIR.attestationKey = attestationAMAIR.key;
-              adhesionAMAIR.attestationUrl = attestationAMAIR.url;
+              const adhesionAMAIR = new Adhesion({
+                user: adhesion.user._id,
+                organisme: 'AMAIR',
+                annee: adhesion.annee,
+                napi: adhesion.napi,
+                numeroAmexa: adhesion.numeroAmexa,
+                nombreRuches: adhesion.nombreRuches,
+                nombreRuchers: adhesion.nombreRuchers,
+                localisation: adhesion.localisation,
+                siret: adhesion.siret,
+                paiement: {
+                  montant: 0,
+                  typePaiement: 'gratuit',
+                  status: 'paye',
+                  datePaiement: new Date(),
+                },
+                status: 'actif',
+                dateValidation: new Date(),
+                informationsPersonnelles: adhesion.informationsPersonnelles,
+                informationsSpecifiques: {
+                  AMAIR: {
+                    adherentSAR: true
+                  }
+                },
+              });
               await adhesionAMAIR.save();
-            } catch (attestationError) {
-              console.error('Erreur génération attestation AMAIR:', attestationError);
+              adhesionAMAIRCreee = true;
+              console.log(`✅ Adhésion AMAIR gratuite créée automatiquement pour l'adhérent SAR ${adhesion.user._id}`);
+              
+              // Générer l'attestation pour l'adhésion AMAIR gratuite
+              try {
+                const attestationAMAIR = await generateAndUploadAttestation(adhesionAMAIR);
+                adhesionAMAIR.attestationKey = attestationAMAIR.key;
+                adhesionAMAIR.attestationUrl = attestationAMAIR.url;
+                await adhesionAMAIR.save();
+              } catch (attestationError) {
+                console.error('Erreur génération attestation AMAIR:', attestationError);
+              }
+            } catch (error) {
+              console.error('Erreur lors de la création de l\'adhésion AMAIR gratuite:', error);
             }
-          } catch (error) {
-            console.error('Erreur lors de la création de l\'adhésion AMAIR gratuite:', error);
           }
         }
         
@@ -834,6 +856,19 @@ const markServicePaymentAsPaid = asyncHandler(async (req, res) => {
 
   await service.save();
 
+  // Générer l'attestation si le service est actif
+  if (service.status === 'actif') {
+    try {
+      const { generateAndUploadServiceAttestation } = require('../services/pdfService');
+      const attestationResult = await generateAndUploadServiceAttestation(service);
+      service.attestationKey = attestationResult.key;
+      service.attestationUrl = attestationResult.url;
+      await service.save();
+    } catch (attestationError) {
+      console.error('Erreur génération attestation service:', attestationError);
+    }
+  }
+
   res.json({
     success: true,
     service,
@@ -878,6 +913,142 @@ const getServiceForPayment = asyncHandler(async (req, res) => {
   });
 });
 
+// @desc    Récupérer tous les paiements en attente (adhésions + services)
+// @route   GET /api/payment/pending
+// @access  Private/Admin
+const getPendingPayments = asyncHandler(async (req, res) => {
+  const { annee, type } = req.query;
+  const currentYear = annee ? parseInt(annee) : new Date().getFullYear();
+
+  // Filtrer par organisme selon les droits de l'admin
+  let organismeFilter = {};
+  if (req.user.role !== 'super_admin') {
+    const userOrganismes = req.user.organismes || [req.user.organisme];
+    organismeFilter = { organisme: { $in: userOrganismes } };
+  }
+
+  // Récupérer les adhésions en attente de paiement
+  let adhesionsEnAttente = [];
+  if (!type || type === 'adhesion') {
+    adhesionsEnAttente = await Adhesion.find({
+      annee: currentYear,
+      'paiement.status': { $in: ['non_demande', 'demande'] },
+      ...organismeFilter,
+    })
+      .populate('user', 'prenom nom email telephone')
+      .select('user organisme annee paiement status createdAt')
+      .sort({ createdAt: -1 });
+  }
+
+  // Récupérer les services en attente de paiement
+  let servicesEnAttente = [];
+  if (!type || type === 'service') {
+    const Service = require('../models/serviceModel');
+    servicesEnAttente = await Service.find({
+      annee: currentYear,
+      'paiement.status': { $in: ['non_demande', 'demande'] },
+      ...organismeFilter,
+    })
+      .populate('user', 'prenom nom email telephone')
+      .populate('adhesion', 'organisme')
+      .select('user adhesion nom typeService annee paiement caution status createdAt')
+      .sort({ createdAt: -1 });
+  }
+
+  // Récupérer les paiements récemment effectués (30 derniers jours)
+  let paiementsRecents = [];
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+  if (!type || type === 'adhesion') {
+    const adhesionsPayees = await Adhesion.find({
+      annee: currentYear,
+      'paiement.status': 'paye',
+      'paiement.datePaiement': { $gte: thirtyDaysAgo },
+      ...organismeFilter,
+    })
+      .populate('user', 'prenom nom email')
+      .select('user organisme annee paiement status')
+      .sort({ 'paiement.datePaiement': -1 })
+      .limit(20);
+
+    paiementsRecents.push(...adhesionsPayees.map(a => ({
+      _id: a._id,
+      type: 'adhesion',
+      user: a.user,
+      organisme: a.organisme,
+      annee: a.annee,
+      montant: a.paiement.montant,
+      typePaiement: a.paiement.typePaiement,
+      datePaiement: a.paiement.datePaiement,
+    })));
+  }
+
+  if (!type || type === 'service') {
+    const Service = require('../models/serviceModel');
+    const servicesPayes = await Service.find({
+      annee: currentYear,
+      'paiement.status': 'paye',
+      'paiement.datePaiement': { $gte: thirtyDaysAgo },
+      ...organismeFilter,
+    })
+      .populate('user', 'prenom nom email')
+      .select('user organisme nom typeService annee paiement')
+      .sort({ 'paiement.datePaiement': -1 })
+      .limit(20);
+
+    paiementsRecents.push(...servicesPayes.map(s => ({
+      _id: s._id,
+      type: 'service',
+      nom: s.nom,
+      user: s.user,
+      organisme: s.organisme,
+      annee: s.annee,
+      montant: s.paiement.montant,
+      typePaiement: s.paiement.typePaiement,
+      datePaiement: s.paiement.datePaiement,
+    })));
+  }
+
+  // Trier les paiements récents par date
+  paiementsRecents.sort((a, b) => new Date(b.datePaiement) - new Date(a.datePaiement));
+
+  res.json({
+    annee: currentYear,
+    adhesionsEnAttente: adhesionsEnAttente.map(a => ({
+      _id: a._id,
+      type: 'adhesion',
+      user: a.user,
+      organisme: a.organisme,
+      annee: a.annee,
+      montant: a.paiement.montant,
+      status: a.paiement.status,
+      dateEnvoiLien: a.paiement.dateEnvoiLien,
+      createdAt: a.createdAt,
+    })),
+    servicesEnAttente: servicesEnAttente.map(s => ({
+      _id: s._id,
+      type: 'service',
+      nom: s.nom,
+      typeService: s.typeService,
+      user: s.user,
+      organisme: s.organisme,
+      annee: s.annee,
+      montant: s.paiement.montant,
+      status: s.paiement.status,
+      cautionStatus: s.caution?.status,
+      createdAt: s.createdAt,
+    })),
+    paiementsRecents: paiementsRecents.slice(0, 20),
+    stats: {
+      totalAdhesionsEnAttente: adhesionsEnAttente.length,
+      totalServicesEnAttente: servicesEnAttente.length,
+      montantAdhesionsEnAttente: adhesionsEnAttente.reduce((sum, a) => sum + (a.paiement.montant || 0), 0),
+      montantServicesEnAttente: servicesEnAttente.reduce((sum, s) => sum + (s.paiement.montant || 0), 0),
+    },
+  });
+});
+
 module.exports = {
   createPaymentSession,
   handleStripeWebhook,
@@ -889,4 +1060,5 @@ module.exports = {
   createServicePaymentSession,
   markServicePaymentAsPaid,
   getServiceForPayment,
+  getPendingPayments,
 };

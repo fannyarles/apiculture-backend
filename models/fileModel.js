@@ -36,6 +36,7 @@ const fileSchema = mongoose.Schema(
         'certificat_sanitaire',
         'bulletin_adhesion',
         'attestation_adhesion',
+        'attestation_service',
         'declaration_ruches',
         'autre'
       ],
@@ -49,6 +50,11 @@ const fileSchema = mongoose.Schema(
     adhesion: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Adhesion',
+      required: false,
+    },
+    service: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Service',
       required: false,
     },
     uploadedBy: {

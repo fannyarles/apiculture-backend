@@ -118,6 +118,24 @@ const permissionSchema = mongoose.Schema(
         description: 'Voir les statistiques globales',
       },
     },
+    // Module Gestion de l'activité
+    gestionActivite: {
+      access: {
+        type: Boolean,
+        default: false,
+        description: 'Accès au module gestion de l\'activité',
+      },
+      modifierInfosStatutaires: {
+        type: Boolean,
+        default: false,
+        description: 'Modifier les informations statutaires (composition du conseil et du bureau)',
+      },
+      consulterCompositions: {
+        type: Boolean,
+        default: false,
+        description: 'Consulter les compositions précédentes (historique des PDF)',
+      },
+    },
   },
   {
     timestamps: true,
@@ -168,6 +186,11 @@ permissionSchema.statics.createDefaultPermissions = async function (userId, role
     dashboard: {
       access: true,
       viewStats: false,
+    },
+    gestionActivite: {
+      access: false,
+      modifierInfosStatutaires: false,
+      consulterCompositions: false,
     },
   };
 
