@@ -25,8 +25,7 @@ try {
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
-console.log('SMTP_HOST =', process.env.SMTP_HOST);
-console.log('SMTP_PORT =', process.env.SMTP_PORT);
+
 // Routes
 console.log('📍 Montage des routes...');
 app.use('/auth', require('./routes/authRoutes'));
@@ -62,6 +61,9 @@ console.log('✅ /composition');
 
 // Servir les fichiers statiques pour les uploads
 app.use('/uploads', express.static('uploads'));
+
+console.log('SMTP_HOST =', process.env.SMTP_HOST);
+console.log('SMTP_PORT =', process.env.SMTP_PORT);
 
 // Route de test
 app.get('/', (req, res) => {
