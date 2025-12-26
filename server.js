@@ -25,7 +25,8 @@ try {
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
-
+console.log('SMTP_HOST =', process.env.SMTP_HOST);
+console.log('SMTP_PORT =', process.env.SMTP_PORT);
 // Routes
 console.log('📍 Montage des routes...');
 app.use('/auth', require('./routes/authRoutes'));
