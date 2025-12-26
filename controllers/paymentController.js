@@ -654,15 +654,10 @@ const requestPayment = asyncHandler(async (req, res) => {
     throw new Error('Adhésion non trouvée');
   }
 
-  // Mettre à jour le statut
-  adhesion.status = 'paiement_demande';
-  adhesion.paiement.status = 'demande';
-  adhesion.paiement.dateEnvoiLien = new Date();
-  await adhesion.save();
-
-  // Envoyer automatiquement le lien de paiement
+  // Préparer le lien de paiement
   const paymentUrl = `${process.env.FRONTEND_URL}/reglement-adhesion/${adhesionId}`;
 
+  // Envoyer d'abord l'email - ne mettre à jour le statut que si l'envoi réussit
   try {
     await transporter.sendMail({
       from: `"${process.env.PLATFORM_NAME}" <${process.env.SMTP_FROM_EMAIL}>`,
@@ -690,6 +685,12 @@ const requestPayment = asyncHandler(async (req, res) => {
       `,
     });
 
+    // Email envoyé avec succès - maintenant mettre à jour le statut
+    adhesion.status = 'paiement_demande';
+    adhesion.paiement.status = 'demande';
+    adhesion.paiement.dateEnvoiLien = new Date();
+    await adhesion.save();
+
     res.json({ 
       success: true,
       message: 'Demande de paiement envoyée',
@@ -702,7 +703,7 @@ const requestPayment = asyncHandler(async (req, res) => {
   } catch (error) {
     console.error('Erreur lors de l\'envoi de l\'email:', error);
     res.status(500);
-    throw new Error('Erreur lors de l\'envoi de la demande de paiement');
+    throw new Error('Erreur lors de l\'envoi de la demande de paiement. Le statut n\'a pas été modifié.');
   }
 });
 
