@@ -22,8 +22,8 @@ router.get('/user', protect, getMyAdhesions); // Alias pour /my-adhesions
 
 // Route mixte : retourne les adhésions selon le rôle
 router.get('/', protect, async (req, res, next) => {
-  // Si admin, appeler getAllAdhesions, sinon getMyAdhesions
-  if (req.user.role === 'admin') {
+  // Si admin ou super_admin, appeler getAllAdhesions, sinon getMyAdhesions
+  if (req.user.role === 'admin' || req.user.role === 'super_admin') {
     return getAllAdhesions(req, res, next);
   } else {
     return getMyAdhesions(req, res, next);

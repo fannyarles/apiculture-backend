@@ -346,8 +346,7 @@ const getAdhesionById = asyncHandler(async (req, res) => {
 const getAllAdhesions = asyncHandler(async (req, res) => {
   const { annee, organisme, status } = req.query;
   const { getOrganismeFilter } = require('../utils/organismeHelper');
-
-  let filter = {};
+    let filter = {};
   
   // Filtrer automatiquement par les organismes de l'admin
   // Super admin voit tout, admin voit ses organismes
@@ -362,7 +361,7 @@ const getAllAdhesions = asyncHandler(async (req, res) => {
   
   if (annee) filter.annee = parseInt(annee);
   if (status) filter.status = status;
-
+  
   const adhesions = await Adhesion.find(filter)
     .populate('user', 'prenom nom email phone')
     .sort({ createdAt: -1 });
