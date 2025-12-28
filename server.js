@@ -58,6 +58,12 @@ app.use('/services', require('./routes/serviceRoutes'));
 console.log('✅ /services');
 app.use('/composition', require('./routes/compositionRoutes'));
 console.log('✅ /composition');
+app.use('/conseil', require('./routes/conseilRoutes'));
+console.log('✅ /conseil');
+app.use('/reunions', require('./routes/reunionRoutes'));
+console.log('✅ /reunions');
+app.use('/users-management', require('./routes/userRoutes'));
+console.log('✅ /users-management');
 
 // Servir les fichiers statiques pour les uploads
 app.use('/uploads', express.static('uploads'));

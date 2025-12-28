@@ -136,6 +136,42 @@ const permissionSchema = mongoose.Schema(
         description: 'Consulter les compositions précédentes (historique des PDF)',
       },
     },
+    // Module Réunions
+    reunions: {
+      access: {
+        type: Boolean,
+        default: false,
+        description: 'Accès au module suivi des réunions',
+      },
+      createReunion: {
+        type: Boolean,
+        default: false,
+        description: 'Créer des réunions',
+      },
+      editReunion: {
+        type: Boolean,
+        default: false,
+        description: 'Modifier des réunions',
+      },
+      deleteReunion: {
+        type: Boolean,
+        default: false,
+        description: 'Supprimer des réunions',
+      },
+      manageDocuments: {
+        type: Boolean,
+        default: false,
+        description: 'Gérer les documents des réunions (ajouter/supprimer)',
+      },
+    },
+    // Module Utilisateurs
+    users: {
+      access: {
+        type: Boolean,
+        default: false,
+        description: 'Accès à la liste des utilisateurs',
+      },
+    },
   },
   {
     timestamps: true,
@@ -191,6 +227,16 @@ permissionSchema.statics.createDefaultPermissions = async function (userId, role
       access: false,
       modifierInfosStatutaires: false,
       consulterCompositions: false,
+    },
+    reunions: {
+      access: false,
+      createReunion: false,
+      editReunion: false,
+      deleteReunion: false,
+      manageDocuments: false,
+    },
+    users: {
+      access: false,
     },
   };
 

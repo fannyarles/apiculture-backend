@@ -281,7 +281,11 @@ const handleStripeWebhook = asyncHandler(async (req, res) => {
           service.paiement.stripePaymentIntentId = session.payment_intent;
           
           // Mettre à jour le statut global
-          if (service.caution.status === 'recu') {
+          // Pour les services sans caution (ex: assurance_unaf), activer directement
+          if (service.typeService === 'assurance_unaf') {
+            service.status = 'actif';
+            service.dateValidation = new Date();
+          } else if (service.caution?.status === 'recu') {
             service.status = 'actif';
             service.dateValidation = new Date();
           } else {
@@ -304,42 +308,77 @@ const handleStripeWebhook = asyncHandler(async (req, res) => {
           }
 
           // Envoyer email de confirmation
-          const emailContent = `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-              <h2 style="color: #10B981;">✅ Paiement confirmé - ${service.nom}</h2>
-              
-              <p>Bonjour ${service.user.prenom} ${service.user.nom},</p>
-              
-              <p>Nous avons bien reçu votre paiement de <strong>${service.paiement.montant.toFixed(2)} €</strong> pour le droit d'usage des services de la miellerie.</p>
-              
-              <div style="background-color: #F3F4F6; padding: 20px; border-radius: 8px; margin: 20px 0;">
-                <p style="margin: 5px 0;"><strong>Service :</strong> ${service.nom}</p>
-                <p style="margin: 5px 0;"><strong>Année :</strong> ${service.annee}</p>
-                <p style="margin: 5px 0;"><strong>Date de paiement :</strong> ${new Date().toLocaleDateString('fr-FR')}</p>
-              </div>
-              
-              ${service.caution.status === 'recu' ? `
-                <p>Votre accès aux services de la miellerie est maintenant <strong style="color: #10B981;">actif</strong>.</p>
-              ` : `
-                <div style="background-color: #FEF3C7; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #F59E0B;">
-                  <h3 style="color: #92400E; margin-top: 0;">⚠️ Chèque de caution requis</h3>
-                  <p style="color: #78350F; margin-bottom: 0;">
-                    Pour finaliser votre inscription, n'oubliez pas d'envoyer votre chèque de caution de ${service.caution.montant} € 
-                    à l'ordre de l'AMAIR. Votre accès sera activé dès réception du chèque.
-                  </p>
+          let emailContent;
+          
+          if (service.typeService === 'assurance_unaf') {
+            // Email spécifique pour l'assurance UNAF
+            emailContent = `
+              <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                <h2 style="color: #16a34a;">✅ Paiement confirmé - Assurance UNAF</h2>
+                
+                <p>Bonjour ${service.user.prenom} ${service.user.nom},</p>
+                
+                <p>Nous avons bien reçu votre paiement de <strong>${service.paiement.montant.toFixed(2)} €</strong> pour votre souscription à l'Assurance UNAF.</p>
+                
+                <div style="background-color: #F3F4F6; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                  <p style="margin: 5px 0;"><strong>Service :</strong> ${service.nom}</p>
+                  <p style="margin: 5px 0;"><strong>Année :</strong> ${service.annee}</p>
+                  <p style="margin: 5px 0;"><strong>Nombre de ruches :</strong> ${service.unafData?.nombreRuches || 'N/A'}</p>
+                  <p style="margin: 5px 0;"><strong>Date de paiement :</strong> ${new Date().toLocaleDateString('fr-FR')}</p>
                 </div>
-              `}
-              
-              <p>Vous pouvez consulter vos services à tout moment depuis votre espace personnel.</p>
-              
-              <hr style="border: none; border-top: 1px solid #E5E7EB; margin: 30px 0;">
-              
-              <p style="color: #6B7280; font-size: 12px;">
-                Merci de votre confiance,<br>
-                L'équipe AMAIR
-              </p>
-            </div>
-          `;
+                
+                <p>Votre souscription à l'Assurance UNAF est maintenant <strong style="color: #16a34a;">active</strong>.</p>
+                <p>Votre attestation d'adhésion est disponible dans votre espace personnel.</p>
+                
+                <p>Vous pouvez consulter vos services à tout moment depuis votre espace personnel.</p>
+                
+                <hr style="border: none; border-top: 1px solid #E5E7EB; margin: 30px 0;">
+                
+                <p style="color: #6B7280; font-size: 12px;">
+                  Merci de votre confiance,<br>
+                  Le Syndicat Apicole de La Réunion
+                </p>
+              </div>
+            `;
+          } else {
+            // Email pour le service miellerie
+            emailContent = `
+              <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                <h2 style="color: #10B981;">✅ Paiement confirmé - ${service.nom}</h2>
+                
+                <p>Bonjour ${service.user.prenom} ${service.user.nom},</p>
+                
+                <p>Nous avons bien reçu votre paiement de <strong>${service.paiement.montant.toFixed(2)} €</strong> pour le droit d'usage des services de la miellerie.</p>
+                
+                <div style="background-color: #F3F4F6; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                  <p style="margin: 5px 0;"><strong>Service :</strong> ${service.nom}</p>
+                  <p style="margin: 5px 0;"><strong>Année :</strong> ${service.annee}</p>
+                  <p style="margin: 5px 0;"><strong>Date de paiement :</strong> ${new Date().toLocaleDateString('fr-FR')}</p>
+                </div>
+                
+                ${service.caution?.status === 'recu' ? `
+                  <p>Votre accès aux services de la miellerie est maintenant <strong style="color: #10B981;">actif</strong>.</p>
+                ` : `
+                  <div style="background-color: #FEF3C7; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #F59E0B;">
+                    <h3 style="color: #92400E; margin-top: 0;">⚠️ Chèque de caution requis</h3>
+                    <p style="color: #78350F; margin-bottom: 0;">
+                      Pour finaliser votre inscription, n'oubliez pas d'envoyer votre chèque de caution de ${service.caution?.montant || 300} € 
+                      à l'ordre de l'AMAIR. Votre accès sera activé dès réception du chèque.
+                    </p>
+                  </div>
+                `}
+                
+                <p>Vous pouvez consulter vos services à tout moment depuis votre espace personnel.</p>
+                
+                <hr style="border: none; border-top: 1px solid #E5E7EB; margin: 30px 0;">
+                
+                <p style="color: #6B7280; font-size: 12px;">
+                  Merci de votre confiance,<br>
+                  L'équipe AMAIR
+                </p>
+              </div>
+            `;
+          }
 
           await transporter.sendMail({
             from: `"${process.env.PLATFORM_NAME}" ${process.env.SMTP_FROM_EMAIL}`,
@@ -734,11 +773,22 @@ const createServicePaymentSession = asyncHandler(async (req, res) => {
     throw new Error('Ce service a déjà été payé');
   }
 
-  // Le service miellerie est rattaché à l'AMAIR
-  const destinationAccount = process.env.STRIPE_ACCOUNT_AMAIR;
+  // Déterminer le compte de destination selon le type de service
+  let destinationAccount;
+  let serviceDescription;
 
-  if (!destinationAccount) {
-    console.warn('⚠️  Compte Stripe AMAIR non configuré. Le paiement ira sur le compte principal.');
+  if (service.typeService === 'miellerie') {
+    destinationAccount = process.env.STRIPE_ACCOUNT_AMAIR;
+    serviceDescription = `Droit d'usage annuel pour les services de la miellerie AMAIR`;
+    if (!destinationAccount) {
+      console.warn('⚠️  Compte Stripe AMAIR non configuré. Le paiement ira sur le compte principal.');
+    }
+  } else if (service.typeService === 'assurance_unaf') {
+    destinationAccount = process.env.STRIPE_ACCOUNT_SAR;
+    serviceDescription = `Assurance UNAF via le Syndicat Apicole de La Réunion`;
+    if (!destinationAccount) {
+      console.warn('⚠️  Compte Stripe SAR non configuré. Le paiement ira sur le compte principal.');
+    }
   }
 
   try {
@@ -750,7 +800,7 @@ const createServicePaymentSession = asyncHandler(async (req, res) => {
             currency: 'eur',
             product_data: {
               name: `${service.nom} - ${service.annee}`,
-              description: `Droit d'usage annuel pour les services de la miellerie AMAIR`,
+              description: serviceDescription,
             },
             unit_amount: Math.round(service.paiement.montant * 100),
           },
@@ -848,7 +898,11 @@ const markServicePaymentAsPaid = asyncHandler(async (req, res) => {
   if (note) service.paiement.note = note;
 
   // Mettre à jour le statut global
-  if (service.caution.status === 'recu') {
+  // Pour les services sans caution (ex: assurance_unaf), activer directement
+  if (service.typeService === 'assurance_unaf') {
+    service.status = 'actif';
+    service.dateValidation = new Date();
+  } else if (service.caution?.status === 'recu') {
     service.status = 'actif';
     service.dateValidation = new Date();
   } else {

@@ -631,11 +631,201 @@ const generateAndUploadBulletinAdhesion = async (adhesion) => {
 };
 
 /**
+ * Génère une attestation de souscription au service Assurance UNAF
+ * @param {Object} service - Le service complet (avec user et unafData)
+ * @returns {Promise<Buffer>} - Le PDF en buffer
+ */
+const generateUNAFAttestationPDF = async (service) => {
+  return new Promise(async (resolve, reject) => {
+    try {
+      const doc = new PDFDocument({
+        size: 'A4',
+        margins: { top: 50, bottom: 50, left: 50, right: 50 }
+      });
+
+      const buffers = [];
+      doc.on('data', buffers.push.bind(buffers));
+      doc.on('end', () => {
+        const pdfBuffer = Buffer.concat(buffers);
+        resolve(pdfBuffer);
+      });
+      doc.on('error', reject);
+
+      const user = service.user;
+      const unafData = service.unafData || {};
+      const infos = service.informationsPersonnelles || user;
+
+      // En-tête SAR
+      doc.fontSize(24)
+         .font('Helvetica-Bold')
+         .fillColor('#16a34a')
+         .text('SYNDICAT APICOLE DE LA RÉUNION', { align: 'center' });
+      
+      doc.moveDown(0.3);
+      doc.fontSize(12)
+         .fillColor('#000000')
+         .font('Helvetica')
+         .text('Membre de l\'Union Nationale de l\'Apiculture Française (UNAF)', { align: 'center' });
+      
+      doc.moveDown(2);
+
+      // Titre du document
+      doc.fontSize(22)
+         .font('Helvetica-Bold')
+         .fillColor('#16a34a')
+         .text('ATTESTATION D\'ADHÉSION', { align: 'center' });
+      
+      doc.moveDown(0.3);
+      doc.fontSize(16)
+         .fillColor('#1e40af')
+         .text('ASSURANCE UNAF', { align: 'center' });
+      
+      doc.moveDown(0.5);
+      doc.fontSize(14)
+         .fillColor('#000000')
+         .font('Helvetica')
+         .text(`Année ${service.annee}`, { align: 'center' });
+      
+      doc.moveDown(2);
+
+      // Corps de l'attestation
+      doc.fontSize(12)
+         .font('Helvetica');
+
+      const nomComplet = `${user.prenom || infos.prenom} ${user.nom || infos.nom}`;
+      
+      doc.text('Le Syndicat Apicole de La Réunion atteste que :', { align: 'left' });
+      doc.moveDown(1);
+
+      // Informations de l'adhérent en encadré
+      const boxY = doc.y;
+      doc.rect(50, boxY, 495, 100)
+         .stroke('#16a34a');
+      
+      doc.fontSize(14)
+         .font('Helvetica-Bold')
+         .text(nomComplet.toUpperCase(), 70, boxY + 15);
+      
+      doc.fontSize(11)
+         .font('Helvetica');
+      
+      if (infos.adresse?.rue) {
+        doc.text(`${infos.adresse.rue}`, 70, boxY + 35);
+      }
+      if (infos.adresse?.codePostal && infos.adresse?.ville) {
+        doc.text(`${infos.adresse.codePostal} ${infos.adresse.ville}`, 70, boxY + 50);
+      }
+      
+      doc.text(`Email : ${infos.email || user.email}`, 70, boxY + 70);
+      if (unafData.siret) {
+        doc.text(`SIRET : ${unafData.siret}`, 300, boxY + 70);
+      }
+
+      doc.y = boxY + 115;
+      doc.moveDown(0.5);
+
+      // Texte d'attestation
+      doc.fontSize(12)
+         .font('Helvetica');
+      
+      doc.text(`a souscrit à l'Assurance UNAF via le Syndicat Apicole de La Réunion pour l'année ${service.annee}.`, {
+        align: 'left'
+      });
+
+      doc.moveDown(1.5);
+
+      // Détails de la souscription
+      doc.fontSize(11)
+         .font('Helvetica-Bold')
+         .text('Détails de la souscription :');
+      
+      doc.moveDown(0.5);
+      doc.font('Helvetica');
+      
+      doc.text(`• Nombre de ruches déclarées : ${unafData.nombreRuches || 0}`);
+      doc.text(`• Nombre d'emplacements : ${unafData.nombreEmplacements || 0}`);
+      
+      const options = unafData.options || {};
+      const formuleAssurance = options.assurance?.formule?.replace('formule', 'Formule ') || 'Non spécifiée';
+      doc.text(`• Formule d'assurance : ${formuleAssurance}`);
+      
+      if (options.revue?.choix && options.revue.choix !== 'aucun') {
+        const revueLabel = {
+          'papier': 'Papier',
+          'numerique': 'Numérique',
+          'papier_numerique': 'Papier + Numérique'
+        };
+        doc.text(`• Revue "Abeilles & Fleurs" : ${revueLabel[options.revue.choix] || options.revue.choix}`);
+      }
+      
+      if (options.affairesJuridiques?.souscrit) {
+        doc.text(`• Cotisation Affaires Juridiques : Oui`);
+      }
+      
+      if (options.ecocontribution?.souscrit) {
+        doc.text(`• Écocontribution : Oui`);
+      }
+
+      doc.moveDown(1);
+      
+      // Montant total
+      doc.fontSize(12)
+         .font('Helvetica-Bold')
+         .text(`Montant total : ${service.paiement?.montant || unafData.detailMontants?.total || 0} €`);
+
+      doc.moveDown(1);
+      doc.text(`Date de validation : ${new Date(service.dateValidation || service.createdAt).toLocaleDateString('fr-FR', { 
+        day: '2-digit', 
+        month: 'long', 
+        year: 'numeric' 
+      })}`);
+
+      doc.moveDown(2);
+
+      // Signature et cachet
+      doc.fontSize(11)
+         .fillColor('#000000')
+         .font('Helvetica-Oblique')
+         .text('Fait à Saint-Denis, La Réunion', { align: 'right' });
+      doc.text(`Le ${new Date().toLocaleDateString('fr-FR', { 
+        day: '2-digit', 
+        month: 'long', 
+        year: 'numeric' 
+      })}`, { align: 'right' });
+
+      doc.moveDown(2);
+      doc.font('Helvetica')
+         .text('Le Président du SAR', { align: 'right' });
+
+      // Pied de page
+      doc.fontSize(8)
+         .font('Helvetica-Oblique')
+         .fillColor('#666666')
+         .text(
+           `Document généré automatiquement le ${new Date().toLocaleDateString('fr-FR')} - Référence: ${service._id}`,
+           50,
+           750,
+           { align: 'center', width: 495 }
+         );
+
+      doc.end();
+    } catch (error) {
+      reject(error);
+    }
+  });
+};
+
+/**
  * Génère une attestation de souscription à un service
  * @param {Object} service - Le service complet (avec user)
  * @returns {Promise<Buffer>} - Le PDF en buffer
  */
 const generateServiceAttestationPDF = async (service) => {
+  // Si c'est un service UNAF, utiliser la génération spécifique
+  if (service.typeService === 'assurance_unaf') {
+    return generateUNAFAttestationPDF(service);
+  }
+
   return new Promise(async (resolve, reject) => {
     try {
       const doc = new PDFDocument({

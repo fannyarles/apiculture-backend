@@ -14,12 +14,12 @@ const serviceSchema = mongoose.Schema(
     },
     organisme: {
       type: String,
-      enum: ['AMAIR'],
+      enum: ['AMAIR', 'SAR'],
       required: true,
     },
     typeService: {
       type: String,
-      enum: ['miellerie'],
+      enum: ['miellerie', 'assurance_unaf'],
       required: true,
     },
     nom: {
@@ -115,6 +115,56 @@ const serviceSchema = mongoose.Schema(
       },
       telephone: String,
       email: String,
+    },
+    // Données spécifiques au service Assurance UNAF
+    unafData: {
+      siret: String,
+      nombreEmplacements: Number,
+      nombreRuches: Number,
+      // Options sélectionnées
+      options: {
+        cotisationSyndicale: {
+          montant: { type: Number, default: 80 },
+        },
+        cotisationUNAF: {
+          montant: { type: Number, default: 1.50 },
+        },
+        affairesJuridiques: {
+          souscrit: { type: Boolean, default: false },
+          prixParRuche: { type: Number, default: 0.15 },
+          montant: Number,
+        },
+        ecocontribution: {
+          souscrit: { type: Boolean, default: false },
+          prixParRuche: { type: Number, default: 0.12 },
+          montant: Number,
+        },
+        revue: {
+          choix: {
+            type: String,
+            enum: ['papier', 'numerique', 'papier_numerique', 'aucun'],
+          },
+          montant: Number,
+        },
+        assurance: {
+          formule: {
+            type: String,
+            enum: ['formule1', 'formule2', 'formule3'],
+          },
+          prixParRuche: Number,
+          montant: Number,
+        },
+      },
+      // Détail des montants
+      detailMontants: {
+        cotisationSyndicale: Number,
+        cotisationUNAF: Number,
+        affairesJuridiques: Number,
+        ecocontribution: Number,
+        revue: Number,
+        assurance: Number,
+        total: Number,
+      },
     },
   },
   {

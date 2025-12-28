@@ -31,6 +31,7 @@ const createOrganisme = asyncHandler(async (req, res) => {
   const {
     nom,
     acronyme,
+    typeOrganisme,
     adresse,
     telephone,
     email,
@@ -52,6 +53,7 @@ const createOrganisme = asyncHandler(async (req, res) => {
   const organisme = await Organisme.create({
     nom,
     acronyme: acronyme.toUpperCase(),
+    typeOrganisme,
     adresse,
     telephone,
     email,
@@ -100,6 +102,7 @@ const updateOrganisme = asyncHandler(async (req, res) => {
   organisme.description = req.body.description || organisme.description;
   organisme.siret = req.body.siret || organisme.siret;
   organisme.president = req.body.president || organisme.president;
+  organisme.typeOrganisme = req.body.typeOrganisme || organisme.typeOrganisme;
   
   if (req.body.actif !== undefined) {
     organisme.actif = req.body.actif;
