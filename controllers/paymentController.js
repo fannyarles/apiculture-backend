@@ -248,6 +248,10 @@ const createPaymentSession = asyncHandler(async (req, res) => {
 // @route   POST /api/payment/webhook
 // @access  Public (mais sécurisé par signature Stripe)
 const handleStripeWebhook = asyncHandler(async (req, res) => {
+  
+  console.log('Webhook reçu:', req.body.toString());
+  res.status(200).send({ received: true });
+  return
   const sig = req.headers['stripe-signature'];
   let event;
 
