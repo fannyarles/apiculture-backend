@@ -283,7 +283,7 @@ const generateAttestationPDF = async (adhesion) => {
          .fillColor('#000000');
 
       const user = adhesion.user;
-      const nomComplet = `${user.prenom} ${user.nom}`;
+      const nomComplet = `${user.nom} ${user.prenom}`;
       
       doc.text('Le présent document atteste que :', { align: 'left' });
       doc.moveDown(1);
@@ -891,7 +891,7 @@ const generateUNAFAttestationPDF = async (service) => {
       doc.moveDown(1);
 
       // Corps de l'attestation
-      const nomComplet = `${user.prenom || infos.prenom} ${user.nom || infos.nom}`;
+      const nomComplet = `${user.nom || infos.nom} ${user.prenom || infos.prenom}`;
       
       doc.fontSize(12)
          .font('Helvetica')
@@ -1169,7 +1169,7 @@ const generateServiceAttestationPDF = async (service) => {
          .fillColor('#000000');
 
       const user = service.user;
-      const nomComplet = `${user.prenom} ${user.nom}`;
+      const nomComplet = `${user.nom} ${user.prenom}`;
       const infos = service.informationsPersonnelles || user;
       
       doc.text('Le présent document atteste que :', { align: 'left' });
