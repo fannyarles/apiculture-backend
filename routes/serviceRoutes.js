@@ -12,6 +12,8 @@ const {
   getAMAIRAddress,
   canSubscribeMiellerie,
   canSubscribeUNAF,
+  modifyUNAFSubscription,
+  confirmUNAFModification,
 } = require('../controllers/serviceController');
 const { protect, admin } = require('../middleware/authMiddleware');
 
@@ -24,6 +26,8 @@ router.get('/my-services', protect, getMyServices);
 router.get('/can-subscribe/miellerie', protect, canSubscribeMiellerie);
 router.get('/can-subscribe/assurance-unaf', protect, canSubscribeUNAF);
 router.get('/adhesion/:adhesionId', protect, getServicesByAdhesion);
+router.put('/:serviceId/modify-unaf', protect, modifyUNAFSubscription);
+router.post('/:serviceId/confirm-modification', protect, confirmUNAFModification);
 
 // Routes admin
 router.get('/', protect, admin, getAllServices);

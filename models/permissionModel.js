@@ -163,6 +163,11 @@ const permissionSchema = mongoose.Schema(
         default: false,
         description: 'Gérer les documents des réunions (ajouter/supprimer)',
       },
+      convoquer: {
+        type: Boolean,
+        default: false,
+        description: 'Envoyer des convocations aux membres du bureau ou du conseil',
+      },
     },
     // Module Utilisateurs
     users: {
@@ -170,6 +175,14 @@ const permissionSchema = mongoose.Schema(
         type: Boolean,
         default: false,
         description: 'Accès à la liste des utilisateurs',
+      },
+    },
+    // Module Finances (Stripe)
+    finances: {
+      access: {
+        type: Boolean,
+        default: false,
+        description: 'Accès au compte Stripe et aux informations financières',
       },
     },
   },
@@ -234,8 +247,12 @@ permissionSchema.statics.createDefaultPermissions = async function (userId, role
       editReunion: false,
       deleteReunion: false,
       manageDocuments: false,
+      convoquer: false,
     },
     users: {
+      access: false,
+    },
+    finances: {
       access: false,
     },
   };

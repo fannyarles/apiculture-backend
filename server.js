@@ -23,6 +23,10 @@ try {
 
 // Middleware
 app.use(cors());
+
+// IMPORTANT: Le webhook Stripe doit être AVANT express.json() car il nécessite le body raw
+app.use('/payment/webhook', express.raw({ type: 'application/json' }));
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
@@ -64,6 +68,12 @@ app.use('/reunions', require('./routes/reunionRoutes'));
 console.log('✅ /reunions');
 app.use('/users-management', require('./routes/userRoutes'));
 console.log('✅ /users-management');
+app.use('/unaf-export', require('./routes/unafExportRoutes'));
+console.log('✅ /unaf-export');
+app.use('/stripe-account', require('./routes/stripeAccountRoutes'));
+console.log('✅ /stripe-account');
+app.use('/dev', require('./routes/devRoutes'));
+console.log('✅ /dev');
 
 // Servir les fichiers statiques pour les uploads
 app.use('/uploads', express.static('uploads'));

@@ -63,6 +63,10 @@ const reunionSchema = mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
     },
+    dateConvocation: {
+      type: Date,
+      default: null,
+    },
   },
   {
     timestamps: true,

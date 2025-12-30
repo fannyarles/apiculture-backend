@@ -55,6 +55,14 @@ const serviceSchema = mongoose.Schema(
       stripePaymentIntentId: {
         type: String,
       },
+      // Tracking pour export UNAF
+      exportedToUNAF: {
+        type: Boolean,
+        default: false,
+      },
+      exportDate: {
+        type: Date,
+      },
     },
     // Tracking du chèque de caution
     caution: {
@@ -123,9 +131,6 @@ const serviceSchema = mongoose.Schema(
       nombreRuches: Number,
       // Options sélectionnées
       options: {
-        cotisationSyndicale: {
-          montant: { type: Number, default: 80 },
-        },
         cotisationUNAF: {
           montant: { type: Number, default: 1.50 },
         },
@@ -157,7 +162,6 @@ const serviceSchema = mongoose.Schema(
       },
       // Détail des montants
       detailMontants: {
-        cotisationSyndicale: Number,
         cotisationUNAF: Number,
         affairesJuridiques: Number,
         ecocontribution: Number,
@@ -166,6 +170,52 @@ const serviceSchema = mongoose.Schema(
         total: Number,
       },
     },
+    // Historique des modifications de la souscription
+    historiqueModifications: [{
+      date: {
+        type: Date,
+        default: Date.now,
+      },
+      type: {
+        type: String,
+        enum: ['creation', 'modification'],
+        default: 'modification',
+      },
+      modifications: {
+        formuleAvant: String,
+        formuleApres: String,
+        revueAvant: String,
+        revueApres: String,
+        affairesJuridiquesAvant: Boolean,
+        affairesJuridiquesApres: Boolean,
+        ecocontributionAvant: Boolean,
+        ecocontributionApres: Boolean,
+      },
+      montantSupplementaire: {
+        type: Number,
+        default: 0,
+      },
+      paiement: {
+        stripeSessionId: String,
+        stripePaymentIntentId: String,
+        status: {
+          type: String,
+          enum: ['en_attente', 'paye'],
+          default: 'en_attente',
+        },
+        datePaiement: Date,
+      },
+      signature: String,
+      signatureDate: Date,
+      // Tracking pour export UNAF
+      exportedToUNAF: {
+        type: Boolean,
+        default: false,
+      },
+      exportDate: {
+        type: Date,
+      },
+    }],
   },
   {
     timestamps: true,

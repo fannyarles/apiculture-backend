@@ -4,6 +4,7 @@ const Article = require('../models/articleModel');
 const Communication = require('../models/communicationModel');
 const { getDestinataires } = require('../controllers/communicationController');
 const { envoyerCommunication } = require('../services/emailService');
+const { generateUNAFExcel, isExportDate, EXPORT_DATES_2026 } = require('../services/unafExportService');
 
 /**
  * Cron job qui s'exécute le 31 décembre à 23:59
@@ -211,6 +212,48 @@ const sendScheduledCommunicationsCron = () => {
 };
 
 /**
+ * Cron job qui s'exécute tous les jours à 8h00
+ * Génère automatiquement les exports UNAF aux dates définies
+ */
+const generateUNAFExportCron = () => {
+  // Cron expression: '0 8 * * *' = à 8h00 tous les jours
+  cron.schedule('0 8 * * *', async () => {
+    try {
+      const today = new Date();
+      const annee = today.getFullYear();
+      
+      console.log(`🔍 Cron: Vérification export UNAF (${today.toLocaleDateString('fr-FR')})`);
+      
+      // Vérifier si aujourd'hui est une date d'export
+      if (isExportDate(today, annee)) {
+        console.log(`📊 Cron: C'est une date d'export UNAF, génération en cours...`);
+        
+        const result = await generateUNAFExcel(annee, today);
+        
+        if (result.success) {
+          console.log(`✅ Export UNAF généré: ${result.nombrePaiements} paiements, ${result.montantTotal}€`);
+        } else {
+          console.log(`ℹ️ Export UNAF: ${result.message}`);
+        }
+      } else {
+        console.log(`ℹ️ Pas de date d'export UNAF aujourd'hui`);
+      }
+    } catch (error) {
+      console.error('❌ Erreur lors de la génération de l\'export UNAF:', error);
+      console.error('   Détails:', error.message);
+    }
+  });
+
+  // Afficher les prochaines dates d'export
+  const today = new Date();
+  const nextDates = EXPORT_DATES_2026.filter(d => d > today).slice(0, 3);
+  console.log('📅 Cron job configuré: Export UNAF automatique (8h00 aux dates définies)');
+  if (nextDates.length > 0) {
+    console.log(`   Prochains exports: ${nextDates.map(d => d.toLocaleDateString('fr-FR')).join(', ')}`);
+  }
+};
+
+/**
  * Initialiser tous les cron jobs
  */
 const initCronJobs = () => {
@@ -218,6 +261,7 @@ const initCronJobs = () => {
   updateAnneeEnCoursCron();
   publishScheduledArticlesCron();
   sendScheduledCommunicationsCron();
+  generateUNAFExportCron();
   console.log('✅ Tous les cron jobs sont configurés');
 };
 

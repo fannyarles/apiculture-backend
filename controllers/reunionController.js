@@ -1,6 +1,11 @@
 const asyncHandler = require('express-async-handler');
 const Reunion = require('../models/reunionModel');
 const s3Service = require('../services/s3Service');
+const { generateAndUploadEmargement } = require('../services/emargementService');
+const { envoyerConvocation } = require('../services/emailService');
+const MembreConseil = require('../models/membreConseilModel');
+const Organisme = require('../models/organismeModel');
+const Permission = require('../models/permissionModel');
 
 // @desc    Créer une réunion
 // @route   POST /api/reunions
@@ -326,6 +331,284 @@ const getDocument = asyncHandler(async (req, res) => {
   }
 });
 
+// @desc    Générer une feuille d'émargement
+// @route   POST /api/reunions/:id/emargement
+// @access  Private/Admin
+const generateEmargement = asyncHandler(async (req, res) => {
+  const reunion = await Reunion.findById(req.params.id);
+
+  if (!reunion) {
+    res.status(404);
+    throw new Error('Réunion non trouvée');
+  }
+
+  // Vérifier les permissions
+  const userOrganismes = req.user.organismes || [req.user.organisme];
+  if (req.user.role !== 'super_admin' && !userOrganismes.includes(reunion.organisme)) {
+    res.status(403);
+    throw new Error('Non autorisé');
+  }
+
+  // Vérifier si la date de la réunion est passée
+  const reunionDate = new Date(reunion.date);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  reunionDate.setHours(0, 0, 0, 0);
+  
+  if (reunionDate < today) {
+    res.status(400);
+    throw new Error('Impossible de générer une feuille d\'émargement pour une réunion passée');
+  }
+
+  // Vérifier si une feuille d'émargement existe déjà
+  const existingEmargement = reunion.documents.find(doc => doc.nom === "Feuille d'émargement");
+  if (existingEmargement) {
+    res.status(400);
+    throw new Error('Une feuille d\'émargement existe déjà pour cette réunion');
+  }
+
+  try {
+    // Générer et uploader la feuille d'émargement
+    const documentInfo = await generateAndUploadEmargement(reunion);
+
+    // Ajouter le document à la réunion
+    reunion.documents.push(documentInfo);
+    await reunion.save();
+
+    // Récupérer la réunion mise à jour
+    const updatedReunion = await Reunion.findById(reunion._id)
+      .populate('creePar', 'prenom nom email')
+      .populate('modifiePar', 'prenom nom email');
+
+    res.status(201).json({
+      message: 'Feuille d\'émargement générée avec succès',
+      reunion: updatedReunion,
+    });
+  } catch (error) {
+    console.error('Erreur génération émargement:', error);
+    res.status(500);
+    throw new Error('Erreur lors de la génération de la feuille d\'émargement');
+  }
+});
+
+// @desc    Supprimer la feuille d'émargement
+// @route   DELETE /api/reunions/:id/emargement
+// @access  Private/Admin
+const deleteEmargement = asyncHandler(async (req, res) => {
+  const reunion = await Reunion.findById(req.params.id);
+
+  if (!reunion) {
+    res.status(404);
+    throw new Error('Réunion non trouvée');
+  }
+
+  // Vérifier les permissions
+  const userOrganismes = req.user.organismes || [req.user.organisme];
+  if (req.user.role !== 'super_admin' && !userOrganismes.includes(reunion.organisme)) {
+    res.status(403);
+    throw new Error('Non autorisé');
+  }
+
+  // Vérifier si la date de la réunion est passée
+  const reunionDate = new Date(reunion.date);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  reunionDate.setHours(0, 0, 0, 0);
+  
+  if (reunionDate < today) {
+    res.status(400);
+    throw new Error('Impossible de supprimer une feuille d\'émargement pour une réunion passée');
+  }
+
+  // Trouver la feuille d'émargement
+  const emargementIndex = reunion.documents.findIndex(doc => doc.nom === "Feuille d'émargement");
+  if (emargementIndex === -1) {
+    res.status(404);
+    throw new Error('Aucune feuille d\'émargement trouvée');
+  }
+
+  const emargement = reunion.documents[emargementIndex];
+
+  try {
+    // Supprimer de S3
+    await s3Service.deleteFile(emargement.key);
+
+    // Supprimer du document
+    reunion.documents.splice(emargementIndex, 1);
+    await reunion.save();
+
+    // Récupérer la réunion mise à jour
+    const updatedReunion = await Reunion.findById(reunion._id)
+      .populate('creePar', 'prenom nom email')
+      .populate('modifiePar', 'prenom nom email');
+
+    res.json({
+      message: 'Feuille d\'émargement supprimée avec succès',
+      reunion: updatedReunion,
+    });
+  } catch (error) {
+    console.error('Erreur suppression émargement:', error);
+    res.status(500);
+    throw new Error('Erreur lors de la suppression de la feuille d\'émargement');
+  }
+});
+
+// @desc    Récupérer les membres pour convocation
+// @route   GET /api/reunions/:id/membres-convocation
+// @access  Private/Admin
+const getMembresConvocation = asyncHandler(async (req, res) => {
+  const reunion = await Reunion.findById(req.params.id);
+
+  if (!reunion) {
+    res.status(404);
+    throw new Error('Réunion non trouvée');
+  }
+
+  // Vérifier les permissions
+  const userOrganismes = req.user.organismes || [req.user.organisme];
+  if (req.user.role !== 'super_admin' && !userOrganismes.includes(reunion.organisme)) {
+    res.status(403);
+    throw new Error('Non autorisé');
+  }
+
+  // Vérifier permission convoquer
+  if (req.user.role !== 'super_admin') {
+    const permissions = await Permission.findOne({ userId: req.user._id });
+    if (!permissions?.reunions?.convoquer) {
+      res.status(403);
+      throw new Error('Permission de convoquer non accordée');
+    }
+  }
+
+  // Récupérer les membres selon le type de réunion
+  let membres = [];
+  if (reunion.type === 'assemblee_generale') {
+    membres = await MembreConseil.find({
+      organisme: reunion.organisme,
+      estBureau: true,
+      actif: true,
+    }).populate('adherent', 'nom prenom email');
+  } else {
+    membres = await MembreConseil.find({
+      organisme: reunion.organisme,
+      estConseil: true,
+      actif: true,
+    }).populate('adherent', 'nom prenom email');
+  }
+
+  // Récupérer le type d'organisme
+  const organisme = await Organisme.findOne({ acronyme: reunion.organisme });
+
+  res.json({
+    membres: membres.map(m => ({
+      _id: m._id,
+      nom: m.adherent?.nom || '',
+      prenom: m.adherent?.prenom || '',
+      email: m.adherent?.email || '',
+      fonction: m.fonction,
+      estBureau: m.estBureau,
+    })),
+    typeOrganisme: organisme?.typeOrganisme || 'association',
+    typeReunion: reunion.type,
+  });
+});
+
+// @desc    Envoyer une convocation
+// @route   POST /api/reunions/:id/convoquer
+// @access  Private/Admin
+const envoyerConvocationReunion = asyncHandler(async (req, res) => {
+  const { objet, contenu } = req.body;
+
+  if (!objet || !contenu) {
+    res.status(400);
+    throw new Error('L\'objet et le contenu sont requis');
+  }
+
+  const reunion = await Reunion.findById(req.params.id);
+
+  if (!reunion) {
+    res.status(404);
+    throw new Error('Réunion non trouvée');
+  }
+
+  // Vérifier les permissions
+  const userOrganismes = req.user.organismes || [req.user.organisme];
+  if (req.user.role !== 'super_admin' && !userOrganismes.includes(reunion.organisme)) {
+    res.status(403);
+    throw new Error('Non autorisé');
+  }
+
+  // Vérifier permission convoquer
+  if (req.user.role !== 'super_admin') {
+    const permissions = await Permission.findOne({ userId: req.user._id });
+    if (!permissions?.reunions?.convoquer) {
+      res.status(403);
+      throw new Error('Permission de convoquer non accordée');
+    }
+  }
+
+  // Récupérer les membres selon le type de réunion
+  let membres = [];
+  if (reunion.type === 'assemblee_generale') {
+    membres = await MembreConseil.find({
+      organisme: reunion.organisme,
+      estBureau: true,
+      actif: true,
+    }).populate('adherent', 'nom prenom email');
+  } else {
+    membres = await MembreConseil.find({
+      organisme: reunion.organisme,
+      estConseil: true,
+      actif: true,
+    }).populate('adherent', 'nom prenom email');
+  }
+
+  // Filtrer les membres avec email valide
+  const destinataires = membres
+    .filter(m => m.adherent?.email)
+    .map(m => ({
+      nom: m.adherent.nom,
+      prenom: m.adherent.prenom,
+      email: m.adherent.email,
+    }));
+
+  if (destinataires.length === 0) {
+    res.status(400);
+    throw new Error('Aucun destinataire avec email valide');
+  }
+
+  try {
+    const result = await envoyerConvocation(
+      destinataires,
+      { objet, contenu },
+      reunion.organisme
+    );
+
+    // Enregistrer la date de convocation si au moins un email a été envoyé
+    if (result.emailsEnvoyes > 0) {
+      reunion.dateConvocation = new Date();
+      await reunion.save();
+    }
+
+    // Récupérer la réunion mise à jour
+    const updatedReunion = await Reunion.findById(reunion._id)
+      .populate('creePar', 'prenom nom email')
+      .populate('modifiePar', 'prenom nom email');
+
+    res.json({
+      message: 'Convocation envoyée avec succès',
+      emailsEnvoyes: result.emailsEnvoyes,
+      emailsEchoues: result.emailsEchoues,
+      erreurs: result.erreurs,
+      reunion: updatedReunion,
+    });
+  } catch (error) {
+    console.error('Erreur envoi convocation:', error);
+    res.status(500);
+    throw new Error('Erreur lors de l\'envoi de la convocation');
+  }
+});
+
 module.exports = {
   createReunion,
   getReunions,
@@ -335,4 +618,8 @@ module.exports = {
   addDocument,
   deleteDocument,
   getDocument,
+  generateEmargement,
+  deleteEmargement,
+  getMembresConvocation,
+  envoyerConvocationReunion,
 };

@@ -12,6 +12,10 @@ const {
   addDocument,
   deleteDocument,
   getDocument,
+  generateEmargement,
+  deleteEmargement,
+  getMembresConvocation,
+  envoyerConvocationReunion,
 } = require('../controllers/reunionController');
 
 // Configuration de multer pour stocker en mémoire (buffer)
@@ -84,5 +88,17 @@ router.route('/:id/documents')
 router.route('/:id/documents/:documentId')
   .get(protect, admin, checkReunionPermission, getDocument)
   .delete(protect, admin, checkReunionPermission, deleteDocument);
+
+// Routes pour la feuille d'émargement
+router.route('/:id/emargement')
+  .post(protect, admin, checkReunionPermission, generateEmargement)
+  .delete(protect, admin, checkReunionPermission, deleteEmargement);
+
+// Routes pour les convocations
+router.route('/:id/membres-convocation')
+  .get(protect, admin, checkReunionPermission, getMembresConvocation);
+
+router.route('/:id/convoquer')
+  .post(protect, admin, checkReunionPermission, envoyerConvocationReunion);
 
 module.exports = router;

@@ -294,9 +294,137 @@ const envoyerEmailBienvenueAdmin = async (admin, passwordClair) => {
   }
 };
 
+// Envoyer un email avec pièce jointe (pour export UNAF)
+const envoyerEmailAvecPieceJointe = async (destinataire, sujet, contenuHtml, pieceJointe) => {
+  try {
+    const emailFrom = process.env.EMAIL_FROM_SAR;
+
+    const payload = {
+      sender: {
+        email: emailFrom,
+        name: 'SAR - Syndicat Apicole'
+      },
+      to: [
+        {
+          email: destinataire,
+          name: 'UNAF'
+        }
+      ],
+      subject: sujet,
+      htmlContent: contenuHtml
+    };
+
+    // Ajouter la pièce jointe si présente
+    if (pieceJointe) {
+      payload.attachment = [
+        {
+          content: pieceJointe.content, // Base64 encoded
+          name: pieceJointe.name
+        }
+      ];
+    }
+
+    const response = await axios.post(
+      'https://api.brevo.com/v3/smtp/email',
+      payload,
+      {
+        headers: {
+          'api-key': process.env.BREVO_API_KEY,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+
+    console.log(`✅ Email envoyé à ${destinataire} avec pièce jointe`);
+    return { success: true, messageId: response.data.messageId };
+  } catch (error) {
+    console.error(`Erreur envoi email à ${destinataire}:`, error.response?.data || error.message);
+    throw new Error(error.response?.data?.message || error.message);
+  }
+};
+
+// Envoyer une convocation de réunion
+const envoyerConvocation = async (destinataires, convocation, organisme) => {
+  const BATCH_SIZE = parseInt(process.env.EMAIL_BATCH_SIZE) || 10;
+  const BATCH_DELAY = parseInt(process.env.EMAIL_BATCH_DELAY_MS) || 1000;
+
+  let emailsEnvoyes = 0;
+  let emailsEchoues = 0;
+  const erreurs = [];
+
+  const emailFrom = organisme === 'SAR' 
+    ? process.env.EMAIL_FROM_SAR 
+    : process.env.EMAIL_FROM_AMAIR;
+
+  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+  const htmlContent = getEmailTemplate(convocation.contenu, organisme, frontendUrl);
+
+  console.log(`📧 Convocation "${convocation.objet}" - Envoi à ${destinataires.length} membres`);
+
+  for (let i = 0; i < destinataires.length; i += BATCH_SIZE) {
+    const batch = destinataires.slice(i, i + BATCH_SIZE);
+
+    const results = await Promise.allSettled(
+      batch.map(async (destinataire) => {
+        const response = await axios.post(
+          'https://api.brevo.com/v3/smtp/email',
+          {
+            sender: {
+              email: emailFrom,
+              name: organisme === 'SAR' ? 'SAR - Syndicat Apicole' : 'AMAIR - Association Apicole'
+            },
+            to: [
+              {
+                email: destinataire.email,
+                name: `${destinataire.prenom} ${destinataire.nom}`
+              }
+            ],
+            subject: convocation.objet,
+            htmlContent: htmlContent
+          },
+          {
+            headers: {
+              'api-key': process.env.BREVO_API_KEY,
+              'Content-Type': 'application/json'
+            }
+          }
+        );
+        return response;
+      })
+    );
+
+    results.forEach((result, index) => {
+      if (result.status === 'fulfilled') {
+        emailsEnvoyes++;
+      } else {
+        emailsEchoues++;
+        erreurs.push({
+          email: batch[index].email,
+          erreur: result.reason.message,
+          date: new Date()
+        });
+      }
+    });
+
+    if (i + BATCH_SIZE < destinataires.length) {
+      await new Promise(resolve => setTimeout(resolve, BATCH_DELAY));
+    }
+  }
+
+  console.log(`🎉 Convocation envoyée : ${emailsEnvoyes}/${destinataires.length} emails`);
+
+  return {
+    emailsEnvoyes,
+    emailsEchoues,
+    erreurs
+  };
+};
+
 module.exports = {
   envoyerEmail,
   envoyerCommunication,
   getEmailTemplate,
-  envoyerEmailBienvenueAdmin
+  envoyerEmailBienvenueAdmin,
+  envoyerEmailAvecPieceJointe,
+  envoyerConvocation
 };

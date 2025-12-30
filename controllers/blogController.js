@@ -1,5 +1,6 @@
 const asyncHandler = require('express-async-handler');
 const Article = require('../models/articleModel');
+const Adhesion = require('../models/adhesionModel');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs').promises;
@@ -112,29 +113,53 @@ const getArticles = asyncHandler(async (req, res) => {
     filter.tags = tag;
   }
 
-  // Si admin, peut voir tous les articles
-  if (req.user.role === 'admin') {
+  // Si admin ou super_admin, peut voir tous les articles
+  if (['admin', 'super_admin'].includes(req.user.role)) {
     if (statut) {
       // Filtre par statut spécifique
       filter.statut = statut;
     }
     // Sinon, pas de filtre de statut (voir tous les articles)
+    
+    // Filtres additionnels pour admin
+    if (organisme) {
+      filter.organisme = organisme;
+    }
+    if (visibilite) {
+      filter.visibilite = visibilite;
+    }
   } else {
-    // Utilisateur normal : seulement articles publiés
+    // Utilisateur normal : récupérer ses adhésions actives pour l'année en cours
+    const currentYear = new Date().getFullYear();
+    
+    const activeAdhesions = await Adhesion.find({
+      user: req.user._id,
+      status: 'actif',
+      annee: currentYear
+    }).select('organisme');
+
+    const activeOrganismes = activeAdhesions.map(a => a.organisme);
+    const hasActiveAdhesion = activeOrganismes.length > 0;
+
+    // Seulement articles publiés
     filter.statut = 'publie';
-    filter.$or = [
-      { visibilite: 'tous' },
-      { visibilite: 'organisme', organisme: req.user.organisme },
-    ];
-  }
 
-  // Filtres additionnels
-  if (organisme && req.user.role === 'admin') {
-    filter.organisme = organisme;
-  }
-
-  if (visibilite && req.user.role === 'admin') {
-    filter.visibilite = visibilite;
+    if (hasActiveAdhesion) {
+      // L'utilisateur a au moins une adhésion active
+      // Il peut voir :
+      // - Les actualités visibles par "tous" (tous les adhérents)
+      // - Les actualités avec visibilite: 'organisme' et organisme dans ses adhésions
+      // - Les actualités avec visibilite: 'SAR' ou 'AMAIR' si adhérent à cet organisme
+      filter.$or = [
+        { visibilite: 'tous' },
+        { visibilite: 'organisme', organisme: { $in: activeOrganismes } },
+        { visibilite: { $in: activeOrganismes } }, // visibilite: 'SAR' ou 'AMAIR'
+      ];
+    } else {
+      // Pas d'adhésion active pour l'année en cours : aucune actualité visible
+      // On met un filtre impossible pour ne rien retourner
+      filter._id = null;
+    }
   }
 
   const skip = (parseInt(page) - 1) * parseInt(limit);

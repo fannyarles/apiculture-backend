@@ -158,6 +158,32 @@ const getPermissionsStructure = asyncHandler(async (req, res) => {
         { key: 'consulterCompositions', label: 'Consulter les compositions précédentes', description: 'Accéder à l\'historique des compositions archivées (PDF)' },
       ],
     },
+    reunions: {
+      label: 'Suivi des Réunions',
+      icon: 'CalendarDaysIcon',
+      permissions: [
+        { key: 'access', label: 'Accès au module', description: 'Accéder au suivi des réunions' },
+        { key: 'createReunion', label: 'Créer des réunions', description: 'Planifier de nouvelles réunions' },
+        { key: 'editReunion', label: 'Modifier des réunions', description: 'Modifier les informations des réunions' },
+        { key: 'deleteReunion', label: 'Supprimer des réunions', description: 'Supprimer des réunions' },
+        { key: 'manageDocuments', label: 'Gérer les documents', description: 'Ajouter et supprimer des documents aux réunions' },
+        { key: 'convoquer', label: 'Envoyer des convocations', description: 'Convoquer les membres du bureau ou du conseil' },
+      ],
+    },
+    users: {
+      label: 'Gestion des Utilisateurs',
+      icon: 'UsersIcon',
+      permissions: [
+        { key: 'access', label: 'Accès au module', description: 'Accéder à la liste des utilisateurs' },
+      ],
+    },
+    finances: {
+      label: 'Finances (Stripe)',
+      icon: 'BanknotesIcon',
+      permissions: [
+        { key: 'access', label: 'Accès au compte Stripe', description: 'Consulter les informations financières et le solde Stripe' },
+      ],
+    },
   };
 
   res.json(structure);

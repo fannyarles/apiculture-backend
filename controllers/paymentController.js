@@ -78,6 +78,34 @@ const markPaymentAsPaid = asyncHandler(async (req, res) => {
     // Ne pas bloquer le processus si l'attestation échoue
   }
 
+  // CASCADE SAR -> AMAIR : Si adhésion SAR devient active, activer les adhésions AMAIR en attente
+  if (adhesion.organisme === 'SAR') {
+    const adhesionAMAIREnAttente = await Adhesion.findOne({
+      user: adhesion.user._id,
+      organisme: 'AMAIR',
+      annee: adhesion.annee,
+      status: { $in: ['en_attente', 'paiement_demande'] },
+      'informationsSpecifiques.AMAIR.adherentSAR': true,
+    });
+
+    if (adhesionAMAIREnAttente) {
+      adhesionAMAIREnAttente.status = 'actif';
+      adhesionAMAIREnAttente.dateValidation = new Date();
+      await adhesionAMAIREnAttente.save();
+      console.log(`✅ Adhésion AMAIR ${adhesionAMAIREnAttente._id} activée suite à l'activation manuelle de l'adhésion SAR`);
+
+      // Générer l'attestation pour l'adhésion AMAIR
+      try {
+        const attestationAMAIRCascade = await generateAndUploadAttestation(adhesionAMAIREnAttente);
+        adhesionAMAIREnAttente.attestationKey = attestationAMAIRCascade.key;
+        adhesionAMAIREnAttente.attestationUrl = attestationAMAIRCascade.url;
+        await adhesionAMAIREnAttente.save();
+      } catch (attestationError) {
+        console.error('Erreur génération attestation AMAIR (cascade):', attestationError);
+      }
+    }
+  }
+
   // Si adhésion SAR avec adhesionAMAIRGratuite, créer automatiquement l'adhésion AMAIR
   if (adhesion.organisme === 'SAR' && adhesion.adhesionAMAIRGratuite) {
     const existingAMAIR = await Adhesion.findOne({
@@ -206,13 +234,22 @@ const createPaymentSession = asyncHandler(async (req, res) => {
       },
     };
 
+    // Ajouter les données du payment_intent (receipt_email + transfert si applicable)
+    sessionConfig.payment_intent_data = {
+      receipt_email: adhesion.user.email,
+      metadata: {
+        adhesionId: adhesion._id.toString(),
+        userId: adhesion.user._id.toString(),
+        organisme: adhesion.organisme,
+        userEmail: adhesion.user.email,
+      },
+    };
+
     // Ajouter le transfert automatique si un compte de destination est configuré
     if (destinationAccount) {
-      sessionConfig.payment_intent_data = {
-        application_fee_amount: 0, // Pas de frais de plateforme (100% à l'organisme)
-        transfer_data: {
-          destination: destinationAccount,
-        },
+      sessionConfig.payment_intent_data.application_fee_amount = 0; // Pas de frais de plateforme (100% à l'organisme)
+      sessionConfig.payment_intent_data.transfer_data = {
+        destination: destinationAccount,
       };
       console.log(`💸 Paiement configuré pour transfert vers ${adhesion.organisme} (${destinationAccount})`);
     }
@@ -248,10 +285,6 @@ const createPaymentSession = asyncHandler(async (req, res) => {
 // @route   POST /api/payment/webhook
 // @access  Public (mais sécurisé par signature Stripe)
 const handleStripeWebhook = asyncHandler(async (req, res) => {
-  
-  console.log('Webhook reçu:', req.body.toString());
-  res.status(200).send({ received: true });
-  return
   const sig = req.headers['stripe-signature'];
   let event;
 
@@ -408,6 +441,7 @@ const handleStripeWebhook = asyncHandler(async (req, res) => {
         adhesion.paiement.datePaiement = new Date();
         adhesion.paiement.stripePaymentIntentId = session.payment_intent;
         adhesion.status = 'actif';
+        adhesion.dateValidation = new Date();
         await adhesion.save();
         
         // Générer et uploader l'attestation d'adhésion
@@ -418,6 +452,34 @@ const handleStripeWebhook = asyncHandler(async (req, res) => {
           await adhesion.save();
         } catch (attestationError) {
           console.error('Erreur génération attestation:', attestationError);
+        }
+
+        // CASCADE SAR -> AMAIR : Si adhésion SAR devient active, activer les adhésions AMAIR en attente
+        if (adhesion.organisme === 'SAR') {
+          const adhesionAMAIREnAttente = await Adhesion.findOne({
+            user: adhesion.user._id,
+            organisme: 'AMAIR',
+            annee: adhesion.annee,
+            status: { $in: ['en_attente', 'paiement_demande'] },
+            'informationsSpecifiques.AMAIR.adherentSAR': true,
+          });
+
+          if (adhesionAMAIREnAttente) {
+            adhesionAMAIREnAttente.status = 'actif';
+            adhesionAMAIREnAttente.dateValidation = new Date();
+            await adhesionAMAIREnAttente.save();
+            console.log(`✅ Adhésion AMAIR ${adhesionAMAIREnAttente._id} activée suite à l'activation de l'adhésion SAR`);
+
+            // Générer l'attestation pour l'adhésion AMAIR
+            try {
+              const attestationAMAIRCascade = await generateAndUploadAttestation(adhesionAMAIREnAttente);
+              adhesionAMAIREnAttente.attestationKey = attestationAMAIRCascade.key;
+              adhesionAMAIREnAttente.attestationUrl = attestationAMAIRCascade.url;
+              await adhesionAMAIREnAttente.save();
+            } catch (attestationError) {
+              console.error('Erreur génération attestation AMAIR (cascade):', attestationError);
+            }
+          }
         }
         
         // Si adhésion SAR avec adhesionAMAIRGratuite, créer automatiquement l'adhésion AMAIR
@@ -823,15 +885,24 @@ const createServicePaymentSession = asyncHandler(async (req, res) => {
       },
     };
 
+    // Ajouter les données du payment_intent (receipt_email + transfert si applicable)
+    sessionConfig.payment_intent_data = {
+      receipt_email: service.user.email,
+      metadata: {
+        serviceId: service._id.toString(),
+        userId: service.user._id.toString(),
+        typeService: service.typeService,
+        userEmail: service.user.email,
+      },
+    };
+
     // Ajouter le transfert automatique si un compte de destination est configuré
     if (destinationAccount) {
-      sessionConfig.payment_intent_data = {
-        application_fee_amount: 0,
-        transfer_data: {
-          destination: destinationAccount,
-        },
+      sessionConfig.payment_intent_data.application_fee_amount = 0;
+      sessionConfig.payment_intent_data.transfer_data = {
+        destination: destinationAccount,
       };
-      console.log(`💸 Paiement service configuré pour transfert vers AMAIR (${destinationAccount})`);
+      console.log(`💸 Paiement service configuré pour transfert vers ${service.typeService === 'miellerie' ? 'AMAIR' : 'SAR'} (${destinationAccount})`);
     }
 
     const session = await stripe.checkout.sessions.create(sessionConfig);
@@ -1005,12 +1076,12 @@ const getPendingPayments = asyncHandler(async (req, res) => {
     const Service = require('../models/serviceModel');
     servicesEnAttente = await Service.find({
       annee: currentYear,
-      'paiement.status': { $in: ['non_demande', 'demande'] },
+      'paiement.status': 'en_attente', // Service utilise 'en_attente' et non 'non_demande'/'demande'
       ...organismeFilter,
     })
       .populate('user', 'prenom nom email telephone')
       .populate('adhesion', 'organisme')
-      .select('user adhesion nom typeService annee paiement caution status createdAt')
+      .select('user adhesion nom typeService organisme annee paiement caution status createdAt')
       .sort({ createdAt: -1 });
   }
 
@@ -1060,6 +1131,7 @@ const getPendingPayments = asyncHandler(async (req, res) => {
       _id: s._id,
       type: 'service',
       nom: s.nom,
+      typeService: s.typeService,
       user: s.user,
       organisme: s.organisme,
       annee: s.annee,
@@ -1108,6 +1180,105 @@ const getPendingPayments = asyncHandler(async (req, res) => {
   });
 });
 
+// @desc    Créer une session de paiement Stripe pour une modification UNAF
+// @route   POST /api/payment/service-modification/:serviceId/create-session
+// @access  Private
+const createUNAFModificationPaymentSession = asyncHandler(async (req, res) => {
+  const { serviceId } = req.params;
+  const { historiqueEntryIndex } = req.body;
+
+  const service = await Service.findById(serviceId)
+    .populate('user', 'prenom nom email');
+
+  if (!service) {
+    res.status(404);
+    throw new Error('Service non trouvé');
+  }
+
+  if (service.user._id.toString() !== req.user._id.toString()) {
+    res.status(403);
+    throw new Error('Non autorisé');
+  }
+
+  const historiqueEntry = service.historiqueModifications[historiqueEntryIndex];
+  if (!historiqueEntry) {
+    res.status(404);
+    throw new Error('Modification non trouvée');
+  }
+
+  if (historiqueEntry.paiement.status === 'paye') {
+    res.status(400);
+    throw new Error('Cette modification a déjà été payée');
+  }
+
+  const montant = historiqueEntry.montantSupplementaire;
+
+  // Compte Stripe SAR pour UNAF
+  const destinationAccount = process.env.STRIPE_ACCOUNT_SAR;
+
+  try {
+    const sessionConfig = {
+      payment_method_types: ['card'],
+      line_items: [
+        {
+          price_data: {
+            currency: 'eur',
+            product_data: {
+              name: `Modification Assurance UNAF - ${service.annee}`,
+              description: `Supplément pour modification de votre souscription UNAF`,
+            },
+            unit_amount: Math.round(montant * 100),
+          },
+          quantity: 1,
+        },
+      ],
+      mode: 'payment',
+      success_url: `${process.env.FRONTEND_URL}/service/${serviceId}?modification_success=true&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${process.env.FRONTEND_URL}/service/${serviceId}?modification_canceled=true`,
+      customer_email: service.user.email,
+      metadata: {
+        serviceId: service._id.toString(),
+        userId: service.user._id.toString(),
+        historiqueEntryIndex: historiqueEntryIndex.toString(),
+        type: 'service_modification',
+      },
+    };
+
+    // Ajouter les données du payment_intent (receipt_email + transfert si applicable)
+    sessionConfig.payment_intent_data = {
+      receipt_email: service.user.email,
+      metadata: {
+        serviceId: service._id.toString(),
+        userId: service.user._id.toString(),
+        historiqueEntryIndex: historiqueEntryIndex.toString(),
+        userEmail: service.user.email,
+      },
+    };
+
+    if (destinationAccount) {
+      sessionConfig.payment_intent_data.application_fee_amount = 0;
+      sessionConfig.payment_intent_data.transfer_data = {
+        destination: destinationAccount,
+      };
+    }
+
+    const session = await stripe.checkout.sessions.create(sessionConfig);
+
+    // Enregistrer l'ID de session dans l'historique
+    service.historiqueModifications[historiqueEntryIndex].paiement.stripeSessionId = session.id;
+    await service.save();
+
+    res.json({
+      sessionId: session.id,
+      url: session.url,
+    });
+  } catch (error) {
+    console.error('Erreur création session Stripe modification:', error);
+    res.status(500);
+    throw new Error(`Erreur Stripe: ${error.message}`);
+  }
+});
+
 module.exports = {
   createPaymentSession,
   handleStripeWebhook,
@@ -1120,4 +1291,5 @@ module.exports = {
   markServicePaymentAsPaid,
   getServiceForPayment,
   getPendingPayments,
+  createUNAFModificationPaymentSession,
 };

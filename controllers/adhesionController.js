@@ -145,11 +145,29 @@ const createAdhesion = asyncHandler(async (req, res) => {
     
     montant = cotisationBase + droitEntree + cotisationRuches;
   } else if (organisme === 'AMAIR') {
-    // Si l'utilisateur est adhérent SAR, l'adhésion AMAIR est gratuite et active directement
+    // Si l'utilisateur est adhérent SAR, l'adhésion AMAIR est gratuite
     const isAdherentSAR = informationsSpecifiques?.AMAIR?.adherentSAR;
     if (isAdherentSAR) {
+      // Vérifier qu'une adhésion SAR existe pour la même année
+      const adhesionSAR = await Adhesion.findOne({
+        user: req.user._id,
+        organisme: 'SAR',
+        annee: annee,
+      });
+
+      if (!adhesionSAR) {
+        res.status(400);
+        throw new Error('Vous devez avoir une adhésion SAR pour la même année pour bénéficier de la gratuité AMAIR.');
+      }
+
       montant = 0;
-      statusInitial = 'actif';
+      // Le statut dépend du statut de l'adhésion SAR
+      if (adhesionSAR.status === 'actif') {
+        statusInitial = 'actif';
+      } else {
+        // SAR en_attente ou paiement_demande → AMAIR en_attente
+        statusInitial = 'en_attente';
+      }
     } else {
       montant = parametre.tarifs.AMAIR.base;
     }

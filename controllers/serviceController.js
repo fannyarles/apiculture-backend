@@ -82,8 +82,7 @@ const createService = asyncHandler(async (req, res) => {
     // Calculer le montant total
     const nombreRuches = unafOptions.nombreRuches || adhesion.nombreRuches || 0;
     
-    // Cotisations obligatoires
-    const cotisationSyndicale = 80;
+    // Cotisation obligatoire
     const cotisationUNAF = 1.50;
     
     // Options facultatives
@@ -103,38 +102,39 @@ const createService = asyncHandler(async (req, res) => {
     else if (unafOptions.assuranceFormule === 'formule3') assurancePrixParRuche = 2.80;
     const assuranceMontant = assurancePrixParRuche * nombreRuches;
 
-    montant = cotisationSyndicale + cotisationUNAF + affairesJuridiques + ecocontribution + revueMontant + assuranceMontant;
+    montant = cotisationUNAF + affairesJuridiques + ecocontribution + revueMontant + assuranceMontant;
     montant = Math.round(montant * 100) / 100; // Arrondir à 2 décimales
+
+    const optionsData = {
+      cotisationUNAF: { montant: cotisationUNAF },
+      affairesJuridiques: {
+        souscrit: unafOptions.affairesJuridiques || false,
+        prixParRuche: 0.15,
+        montant: affairesJuridiques,
+      },
+      ecocontribution: {
+        souscrit: unafOptions.ecocontribution || false,
+        prixParRuche: 0.12,
+        montant: ecocontribution,
+      },
+      revue: {
+        choix: unafOptions.revue || 'aucun',
+        montant: revueMontant,
+      },
+      assurance: {
+        formule: unafOptions.assuranceFormule,
+        prixParRuche: assurancePrixParRuche,
+        montant: assuranceMontant,
+      },
+    };
 
     unafData = {
       siret: unafOptions.siret || adhesion.siret,
       nombreEmplacements: unafOptions.nombreEmplacements || adhesion.nombreRuchers,
       nombreRuches: nombreRuches,
-      options: {
-        cotisationSyndicale: { montant: cotisationSyndicale },
-        cotisationUNAF: { montant: cotisationUNAF },
-        affairesJuridiques: {
-          souscrit: unafOptions.affairesJuridiques || false,
-          prixParRuche: 0.15,
-          montant: affairesJuridiques,
-        },
-        ecocontribution: {
-          souscrit: unafOptions.ecocontribution || false,
-          prixParRuche: 0.12,
-          montant: ecocontribution,
-        },
-        revue: {
-          choix: unafOptions.revue || 'aucun',
-          montant: revueMontant,
-        },
-        assurance: {
-          formule: unafOptions.assuranceFormule,
-          prixParRuche: assurancePrixParRuche,
-          montant: assuranceMontant,
-        },
-      },
+      options: optionsData,
+      optionsInitiales: optionsData, // Sauvegarder les options initiales pour l'historique
       detailMontants: {
-        cotisationSyndicale,
         cotisationUNAF,
         affairesJuridiques,
         ecocontribution,
@@ -542,6 +542,257 @@ const canSubscribeUNAF = asyncHandler(async (req, res) => {
   });
 });
 
+// @desc    Modifier une souscription UNAF existante
+// @route   PUT /api/services/:serviceId/modify-unaf
+// @access  Private
+const modifyUNAFSubscription = asyncHandler(async (req, res) => {
+  const { serviceId } = req.params;
+  const { modifications, signature } = req.body;
+
+  // Récupérer le service existant
+  const service = await Service.findById(serviceId);
+
+  if (!service) {
+    res.status(404);
+    throw new Error('Service non trouvé');
+  }
+
+  // Vérifier que c'est bien un service UNAF
+  if (service.typeService !== 'assurance_unaf') {
+    res.status(400);
+    throw new Error('Ce service n\'est pas une assurance UNAF');
+  }
+
+  // Vérifier que l'utilisateur est propriétaire
+  if (service.user.toString() !== req.user._id.toString()) {
+    res.status(403);
+    throw new Error('Non autorisé');
+  }
+
+  // Récupérer les données actuelles
+  const currentOptions = service.unafData?.options || {};
+  const nombreRuches = service.unafData?.nombreRuches || 0;
+
+  // Tarifs
+  const TARIFS = {
+    cotisationUNAF: 1.50,
+    affairesJuridiques: 0.15,
+    ecocontribution: 0.12,
+    revue: { papier: 31, numerique: 18, papier_numerique: 35, aucun: 0 },
+    assurance: { formule1: 0.10, formule2: 1.65, formule3: 2.80 },
+  };
+
+  // Ordre des formules pour validation upgrade
+  const formuleOrder = { formule1: 1, formule2: 2, formule3: 3 };
+
+  // Valider les modifications
+  const errors = [];
+
+  // Vérifier upgrade formule assurance (uniquement formule supérieure)
+  if (modifications.assuranceFormule) {
+    const currentFormule = currentOptions.assurance?.formule;
+    const newFormule = modifications.assuranceFormule;
+    if (formuleOrder[newFormule] <= formuleOrder[currentFormule]) {
+      errors.push('Vous ne pouvez passer qu\'à une formule supérieure');
+    }
+  }
+
+  // Vérifier revue (uniquement si aucune option sélectionnée initialement)
+  if (modifications.revue) {
+    const currentRevue = currentOptions.revue?.choix;
+    if (currentRevue && currentRevue !== 'aucun') {
+      errors.push('Vous avez déjà choisi une option de revue');
+    }
+  }
+
+  // Vérifier affaires juridiques (uniquement si non coché initialement)
+  if (modifications.affairesJuridiques === true) {
+    if (currentOptions.affairesJuridiques?.souscrit) {
+      errors.push('Vous avez déjà souscrit aux affaires juridiques');
+    }
+  }
+
+  // Vérifier écocontribution (uniquement si non cochée initialement)
+  if (modifications.ecocontribution === true) {
+    if (currentOptions.ecocontribution?.souscrit) {
+      errors.push('Vous avez déjà souscrit à l\'écocontribution');
+    }
+  }
+
+  if (errors.length > 0) {
+    res.status(400);
+    throw new Error(errors.join('. '));
+  }
+
+  // Calculer le montant supplémentaire
+  let montantSupplementaire = 0;
+  const modificationsEffectuees = {
+    formuleAvant: currentOptions.assurance?.formule,
+    formuleApres: currentOptions.assurance?.formule,
+    revueAvant: currentOptions.revue?.choix,
+    revueApres: currentOptions.revue?.choix,
+    affairesJuridiquesAvant: currentOptions.affairesJuridiques?.souscrit || false,
+    affairesJuridiquesApres: currentOptions.affairesJuridiques?.souscrit || false,
+    ecocontributionAvant: currentOptions.ecocontribution?.souscrit || false,
+    ecocontributionApres: currentOptions.ecocontribution?.souscrit || false,
+  };
+
+  // Calculer différence formule assurance
+  if (modifications.assuranceFormule && modifications.assuranceFormule !== currentOptions.assurance?.formule) {
+    const ancienPrix = TARIFS.assurance[currentOptions.assurance?.formule] || 0;
+    const nouveauPrix = TARIFS.assurance[modifications.assuranceFormule] || 0;
+    montantSupplementaire += (nouveauPrix - ancienPrix) * nombreRuches;
+    modificationsEffectuees.formuleApres = modifications.assuranceFormule;
+  }
+
+  // Calculer ajout revue
+  if (modifications.revue && modifications.revue !== 'aucun' && currentOptions.revue?.choix === 'aucun') {
+    montantSupplementaire += TARIFS.revue[modifications.revue] || 0;
+    modificationsEffectuees.revueApres = modifications.revue;
+  }
+
+  // Calculer ajout affaires juridiques
+  if (modifications.affairesJuridiques === true && !currentOptions.affairesJuridiques?.souscrit) {
+    montantSupplementaire += TARIFS.affairesJuridiques * nombreRuches;
+    modificationsEffectuees.affairesJuridiquesApres = true;
+  }
+
+  // Calculer ajout écocontribution
+  if (modifications.ecocontribution === true && !currentOptions.ecocontribution?.souscrit) {
+    montantSupplementaire += TARIFS.ecocontribution * nombreRuches;
+    modificationsEffectuees.ecocontributionApres = true;
+  }
+
+  montantSupplementaire = Math.round(montantSupplementaire * 100) / 100;
+
+  if (montantSupplementaire <= 0) {
+    res.status(400);
+    throw new Error('Aucune modification à effectuer');
+  }
+
+  // Créer l'entrée dans l'historique
+  const historiqueEntry = {
+    date: new Date(),
+    type: 'modification',
+    modifications: modificationsEffectuees,
+    montantSupplementaire,
+    paiement: {
+      status: 'en_attente',
+    },
+    signature,
+    signatureDate: signature ? new Date() : null,
+  };
+
+  // Ajouter à l'historique
+  if (!service.historiqueModifications) {
+    service.historiqueModifications = [];
+  }
+  service.historiqueModifications.push(historiqueEntry);
+  await service.save();
+
+  // Retourner les infos pour le paiement
+  res.json({
+    success: true,
+    message: 'Modification enregistrée, en attente de paiement',
+    serviceId: service._id,
+    historiqueEntryIndex: service.historiqueModifications.length - 1,
+    montantSupplementaire,
+    modifications: modificationsEffectuees,
+  });
+});
+
+// @desc    Confirmer le paiement d'une modification UNAF et appliquer les changements
+// @route   POST /api/services/:serviceId/confirm-modification
+// @access  Private
+const confirmUNAFModification = asyncHandler(async (req, res) => {
+  const { serviceId } = req.params;
+  const { historiqueEntryIndex, stripePaymentIntentId } = req.body;
+
+  const service = await Service.findById(serviceId);
+
+  if (!service) {
+    res.status(404);
+    throw new Error('Service non trouvé');
+  }
+
+  if (service.user.toString() !== req.user._id.toString()) {
+    res.status(403);
+    throw new Error('Non autorisé');
+  }
+
+  const historiqueEntry = service.historiqueModifications[historiqueEntryIndex];
+  if (!historiqueEntry) {
+    res.status(404);
+    throw new Error('Modification non trouvée');
+  }
+
+  if (historiqueEntry.paiement.status === 'paye') {
+    res.status(400);
+    throw new Error('Cette modification a déjà été payée');
+  }
+
+  // Tarifs pour recalculer les montants
+  const TARIFS = {
+    cotisationUNAF: 1.50,
+    affairesJuridiques: 0.15,
+    ecocontribution: 0.12,
+    revue: { papier: 31, numerique: 18, papier_numerique: 35, aucun: 0 },
+    assurance: { formule1: 0.10, formule2: 1.65, formule3: 2.80 },
+  };
+
+  const nombreRuches = service.unafData?.nombreRuches || 0;
+  const mods = historiqueEntry.modifications;
+
+  // Appliquer les modifications
+  if (mods.formuleApres !== mods.formuleAvant) {
+    service.unafData.options.assurance.formule = mods.formuleApres;
+    service.unafData.options.assurance.prixParRuche = TARIFS.assurance[mods.formuleApres];
+    service.unafData.options.assurance.montant = TARIFS.assurance[mods.formuleApres] * nombreRuches;
+    service.unafData.detailMontants.assurance = TARIFS.assurance[mods.formuleApres] * nombreRuches;
+  }
+
+  if (mods.revueApres !== mods.revueAvant) {
+    service.unafData.options.revue.choix = mods.revueApres;
+    service.unafData.options.revue.montant = TARIFS.revue[mods.revueApres];
+    service.unafData.detailMontants.revue = TARIFS.revue[mods.revueApres];
+  }
+
+  if (mods.affairesJuridiquesApres !== mods.affairesJuridiquesAvant) {
+    service.unafData.options.affairesJuridiques.souscrit = true;
+    service.unafData.options.affairesJuridiques.montant = TARIFS.affairesJuridiques * nombreRuches;
+    service.unafData.detailMontants.affairesJuridiques = TARIFS.affairesJuridiques * nombreRuches;
+  }
+
+  if (mods.ecocontributionApres !== mods.ecocontributionAvant) {
+    service.unafData.options.ecocontribution.souscrit = true;
+    service.unafData.options.ecocontribution.montant = TARIFS.ecocontribution * nombreRuches;
+    service.unafData.detailMontants.ecocontribution = TARIFS.ecocontribution * nombreRuches;
+  }
+
+  // Recalculer le total
+  const newTotal = 
+    service.unafData.detailMontants.cotisationUNAF +
+    service.unafData.detailMontants.affairesJuridiques +
+    service.unafData.detailMontants.ecocontribution +
+    service.unafData.detailMontants.revue +
+    service.unafData.detailMontants.assurance;
+  
+  service.unafData.detailMontants.total = Math.round(newTotal * 100) / 100;
+
+  // Mettre à jour le paiement de l'historique
+  service.historiqueModifications[historiqueEntryIndex].paiement.status = 'paye';
+  service.historiqueModifications[historiqueEntryIndex].paiement.datePaiement = new Date();
+  service.historiqueModifications[historiqueEntryIndex].paiement.stripePaymentIntentId = stripePaymentIntentId;
+
+  await service.save();
+
+  res.json({
+    success: true,
+    message: 'Modification appliquée avec succès',
+    service,
+  });
+});
+
 module.exports = {
   createService,
   getMyServices,
@@ -554,4 +805,6 @@ module.exports = {
   getAMAIRAddress,
   canSubscribeMiellerie,
   canSubscribeUNAF,
+  modifyUNAFSubscription,
+  confirmUNAFModification,
 };

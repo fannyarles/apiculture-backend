@@ -12,6 +12,7 @@ const {
   markServicePaymentAsPaid,
   getServiceForPayment,
   getPendingPayments,
+  createUNAFModificationPaymentSession,
 } = require('../controllers/paymentController');
 const { protect, admin } = require('../middleware/authMiddleware');
 
@@ -29,6 +30,7 @@ router.get('/pending', protect, admin, getPendingPayments);
 router.post('/service/create-payment-session/:serviceId', protect, createServicePaymentSession);
 router.get('/service/:serviceId', protect, getServiceForPayment);
 router.post('/service/mark-paid/:serviceId', protect, admin, markServicePaymentAsPaid);
+router.post('/service-modification/:serviceId/create-session', protect, createUNAFModificationPaymentSession);
 
 // Webhook Stripe (pas de protection auth car Stripe envoie les requêtes)
 // Note: Le webhook nécessite le body brut, pas du JSON parsé

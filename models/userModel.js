@@ -29,8 +29,14 @@ const userSchema = mongoose.Schema(
     },
     adresse: {
       rue: { type: String, required: false },
+      complement: { type: String, required: false },
       codePostal: { type: String, required: false },
       ville: { type: String, required: false },
+      pays: { type: String, required: false, default: 'France' },
+    },
+    telephoneMobile: {
+      type: String,
+      required: false,
     },
     dateNaissance: {
       type: Date,

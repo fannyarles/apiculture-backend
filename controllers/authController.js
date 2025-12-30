@@ -167,10 +167,13 @@ const getUserProfile = asyncHandler(async (req, res) => {
         nom: user.nom,
         email: user.email,
         telephone: user.telephone,
+        telephoneMobile: user.telephoneMobile,
         adresse: user.adresse ? {
           rue: user.adresse.rue,
+          complement: user.adresse.complement,
           codePostal: user.adresse.codePostal,
-          ville: user.adresse.ville
+          ville: user.adresse.ville,
+          pays: user.adresse.pays || 'France'
         } : null,
         dateNaissance: user.dateNaissance,
       }
@@ -195,6 +198,7 @@ const updateUserProfile = asyncHandler(async (req, res) => {
     if (req.body.nom !== undefined) user.nom = req.body.nom;
     if (req.body.email !== undefined) user.email = req.body.email;
     if (req.body.telephone !== undefined) user.telephone = req.body.telephone;
+    if (req.body.telephoneMobile !== undefined) user.telephoneMobile = req.body.telephoneMobile;
     if (req.body.dateNaissance !== undefined) user.dateNaissance = req.body.dateNaissance;
     
     // Mettre à jour l'adresse (objet complet)
@@ -210,6 +214,7 @@ const updateUserProfile = asyncHandler(async (req, res) => {
       nom: updatedUser.nom,
       email: updatedUser.email,
       telephone: updatedUser.telephone,
+      telephoneMobile: updatedUser.telephoneMobile,
       adresse: updatedUser.adresse,
       dateNaissance: updatedUser.dateNaissance,
       role: updatedUser.role,
