@@ -46,18 +46,32 @@ router.post('/upload', protect, upload.single('file'), asyncHandler(async (req, 
   }
 
   try {
+    // Construire le nom de fichier personnalisé selon le type
+    let fileName = req.file.originalname;
+    const fileExtension = path.extname(req.file.originalname).toLowerCase();
+    const currentYear = new Date().getFullYear();
+    
+    // Récupérer les infos utilisateur pour le renommage
+    const userNom = (req.user.nom || '').replace(/[^a-zA-Z0-9]/g, '');
+    const userPrenom = (req.user.prenom || '').replace(/[^a-zA-Z0-9]/g, '');
+    
+    // Renommer selon le type de document
+    if (type === 'declaration_ruches') {
+      fileName = `declarationRuches${currentYear}_${userNom}${userPrenom}${fileExtension}`;
+    }
+    
     // Upload vers S3
     const s3Result = await s3Service.uploadFile(
       req.file.buffer,
-      req.file.originalname,
+      fileName,
       req.file.mimetype,
       `adhesions/${adhesionId || 'temp'}`
     );
 
     // Créer l'entrée dans MongoDB
     const file = await File.create({
-      nom: req.file.originalname.replace(/\.[^/.]+$/, ''), // Nom sans extension
-      nomOriginal: req.file.originalname,
+      nom: fileName.replace(/\.[^/.]+$/, ''), // Nom sans extension
+      nomOriginal: fileName,
       s3Key: s3Result.key,
       s3Bucket: s3Result.bucket,
       mimeType: req.file.mimetype,
