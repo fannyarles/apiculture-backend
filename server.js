@@ -27,8 +27,8 @@ app.use(cors());
 // IMPORTANT: Le webhook Stripe doit être AVANT express.json() car il nécessite le body raw
 app.use('/payment/webhook', express.raw({ type: 'application/json' }));
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: false }));
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: false, limit: '50mb' }));
 
 // Routes
 console.log('📍 Montage des routes...');
