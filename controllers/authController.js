@@ -191,7 +191,6 @@ const updateUserProfile = asyncHandler(async (req, res) => {
   const user = await User.findById(req.user._id);
 
   if (user) {
-    console.log(req.body);
     
     // Mettre à jour les champs simples
     if (req.body.prenom !== undefined) user.prenom = req.body.prenom;
