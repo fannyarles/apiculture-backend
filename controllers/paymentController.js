@@ -288,6 +288,8 @@ const handleStripeWebhook = asyncHandler(async (req, res) => {
   const sig = req.headers['stripe-signature'];
   let event;
 
+  console.log(`✅ Webhook activé`);
+  
   try {
     event = stripe.webhooks.constructEvent(
       req.body,
