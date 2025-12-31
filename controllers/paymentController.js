@@ -445,6 +445,88 @@ const handleStripeWebhook = asyncHandler(async (req, res) => {
         return res.json({ received: true });
       }
 
+      // Traitement du paiement de modification de service UNAF
+      if (session.metadata.type === 'service_modification') {
+        const service = await Service.findById(session.metadata.serviceId).populate(
+          'user',
+          'prenom nom email'
+        );
+
+        if (service) {
+          const historiqueEntryIndex = parseInt(session.metadata.historiqueEntryIndex);
+          const historiqueEntry = service.historiqueModifications[historiqueEntryIndex];
+
+          if (historiqueEntry) {
+            // Marquer le paiement de la modification comme payé
+            historiqueEntry.paiement.status = 'paye';
+            historiqueEntry.paiement.datePaiement = new Date();
+            historiqueEntry.paiement.stripePaymentIntentId = session.payment_intent;
+            
+            // Appliquer les modifications au service
+            if (historiqueEntry.modifications.assuranceFormule) {
+              service.unafData.options.assurance = {
+                ...service.unafData.options.assurance,
+                formule: historiqueEntry.modifications.assuranceFormule,
+              };
+            }
+            if (historiqueEntry.modifications.nombreRuches !== undefined) {
+              service.unafData.nombreRuches = historiqueEntry.modifications.nombreRuches;
+            }
+            if (historiqueEntry.modifications.affairesJuridiques !== undefined) {
+              service.unafData.options.affairesJuridiques = {
+                ...service.unafData.options.affairesJuridiques,
+                souscrit: historiqueEntry.modifications.affairesJuridiques,
+              };
+            }
+            if (historiqueEntry.modifications.ecocontribution !== undefined) {
+              service.unafData.options.ecocontribution = {
+                ...service.unafData.options.ecocontribution,
+                souscrit: historiqueEntry.modifications.ecocontribution,
+              };
+            }
+
+            await service.save();
+
+            // Envoyer email de confirmation
+            const emailContent = `
+              <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                <h2 style="color: #16a34a;">✅ Modification confirmée - Assurance UNAF</h2>
+                
+                <p>Bonjour ${service.user.prenom} ${service.user.nom},</p>
+                
+                <p>Nous avons bien reçu votre paiement de <strong>${historiqueEntry.montantSupplementaire.toFixed(2)} €</strong> pour la modification de votre souscription à l'Assurance UNAF.</p>
+                
+                <div style="background-color: #F3F4F6; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                  <p style="margin: 5px 0;"><strong>Service :</strong> ${service.nom}</p>
+                  <p style="margin: 5px 0;"><strong>Année :</strong> ${service.annee}</p>
+                  <p style="margin: 5px 0;"><strong>Date de paiement :</strong> ${new Date().toLocaleDateString('fr-FR')}</p>
+                </div>
+                
+                <p>Votre modification a été appliquée avec succès.</p>
+                
+                <hr style="border: none; border-top: 1px solid #E5E7EB; margin: 30px 0;">
+                
+                <p style="color: #6B7280; font-size: 12px;">
+                  Merci de votre confiance,<br>
+                  Le Syndicat Apicole de La Réunion
+                </p>
+              </div>
+            `;
+
+            await transporter.sendMail({
+              from: `"${process.env.PLATFORM_NAME}" ${process.env.SMTP_FROM_EMAIL}`,
+              to: service.user.email,
+              subject: `Confirmation de modification - Assurance UNAF ${service.annee}`,
+              html: emailContent,
+            });
+
+            console.log(`✅ Paiement modification confirmé pour le service ${service._id}, modification index ${historiqueEntryIndex}`);
+          }
+        }
+        
+        return res.json({ received: true });
+      }
+
       // Traitement du paiement d'adhésion (code existant)
       const adhesion = await Adhesion.findById(session.metadata.adhesionId).populate(
         'user',
