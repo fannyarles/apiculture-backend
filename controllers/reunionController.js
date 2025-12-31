@@ -3,6 +3,7 @@ const Reunion = require('../models/reunionModel');
 const s3Service = require('../services/s3Service');
 const { generateAndUploadEmargement } = require('../services/emargementService');
 const { envoyerConvocation } = require('../services/emailService');
+const { generateAndUploadConvocation } = require('../services/pdfService');
 const MembreConseil = require('../models/membreConseilModel');
 const Organisme = require('../models/organismeModel');
 const Permission = require('../models/permissionModel');
@@ -11,7 +12,7 @@ const Permission = require('../models/permissionModel');
 // @route   POST /api/reunions
 // @access  Private/Admin
 const createReunion = asyncHandler(async (req, res) => {
-  const { date, type, lieu, notes, organisme } = req.body;
+  const { date, heureDebut, heureFin, type, lieu, notes, organisme } = req.body;
 
   if (!date || !type || !lieu || !organisme) {
     res.status(400);
@@ -27,6 +28,8 @@ const createReunion = asyncHandler(async (req, res) => {
 
   const reunion = await Reunion.create({
     date,
+    heureDebut,
+    heureFin,
     type,
     lieu,
     notes: notes || '',
@@ -122,7 +125,7 @@ const getReunionById = asyncHandler(async (req, res) => {
 // @route   PUT /api/reunions/:id
 // @access  Private/Admin
 const updateReunion = asyncHandler(async (req, res) => {
-  const { date, type, lieu, notes } = req.body;
+  const { date, heureDebut, heureFin, type, lieu, notes, ordresDuJour } = req.body;
 
   const reunion = await Reunion.findById(req.params.id);
 
@@ -138,9 +141,12 @@ const updateReunion = asyncHandler(async (req, res) => {
   }
 
   reunion.date = date || reunion.date;
+  reunion.heureDebut = heureDebut || reunion.heureDebut;
+  reunion.heureFin = heureFin || reunion.heureFin;
   reunion.type = type || reunion.type;
   reunion.lieu = lieu || reunion.lieu;
   reunion.notes = notes !== undefined ? notes : reunion.notes;
+  reunion.ordresDuJour = ordresDuJour !== undefined ? ordresDuJour : reunion.ordresDuJour;
   reunion.modifiePar = req.user._id;
 
   const updatedReunion = await reunion.save();
@@ -513,17 +519,10 @@ const getMembresConvocation = asyncHandler(async (req, res) => {
   });
 });
 
-// @desc    Envoyer une convocation
-// @route   POST /api/reunions/:id/convoquer
+// @desc    Préparer une convocation (générer PDF + pré-remplir email)
+// @route   POST /api/reunions/:id/preparer-convocation
 // @access  Private/Admin
-const envoyerConvocationReunion = asyncHandler(async (req, res) => {
-  const { objet, contenu } = req.body;
-
-  if (!objet || !contenu) {
-    res.status(400);
-    throw new Error('L\'objet et le contenu sont requis');
-  }
-
+const preparerConvocation = asyncHandler(async (req, res) => {
   const reunion = await Reunion.findById(req.params.id);
 
   if (!reunion) {
@@ -563,30 +562,246 @@ const envoyerConvocationReunion = asyncHandler(async (req, res) => {
     }).populate('adherent', 'nom prenom email');
   }
 
-  // Filtrer les membres avec email valide
-  const destinataires = membres
-    .filter(m => m.adherent?.email)
+  // Préparer les données des membres pour la convocation
+  const membresData = membres
+    .filter(m => m.adherent)
     .map(m => ({
+      membreId: m._id,
+      userId: m.adherent._id,
       nom: m.adherent.nom,
       prenom: m.adherent.prenom,
       email: m.adherent.email,
+      fonction: m.fonction,
+      estBureau: m.estBureau,
+      estConseil: m.estConseil,
     }));
+
+  if (membresData.length === 0) {
+    res.status(400);
+    throw new Error('Aucun membre trouvé pour cette réunion');
+  }
+
+  try {
+    // Supprimer l'ancien PDF de convocation s'il existe
+    if (reunion.convocationPdf?.key) {
+      try {
+        await s3Service.deleteFile(reunion.convocationPdf.key);
+        console.log('Ancien PDF de convocation supprimé:', reunion.convocationPdf.key);
+      } catch (err) {
+        console.warn('Impossible de supprimer l\'ancien PDF:', err.message);
+      }
+    }
+
+    // Récupérer le président actuel de l'organisme
+    const president = await MembreConseil.findOne({
+      organisme: reunion.organisme,
+      fonction: 'president',
+      actif: true,
+    }).populate('adherent', 'nom prenom');
+
+    const presidentInfo = president?.adherent ? {
+      nom: president.adherent.nom,
+      prenom: president.adherent.prenom,
+    } : null;
+
+    // Générer et uploader le PDF de convocation
+    const pdfResult = await generateAndUploadConvocation(reunion, membresData, presidentInfo);
+
+    // Mettre à jour la réunion avec les infos du PDF (snapshot fait à l'envoi du mail)
+    reunion.convocationPdf = {
+      nom: pdfResult.fileName,
+      key: pdfResult.key,
+      url: pdfResult.url,
+      dateGeneration: new Date(),
+    };
+
+    await reunion.save();
+
+    // Générer le texte pré-rempli pour le mail
+    const dateReunion = new Date(reunion.date);
+    const options = { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' };
+    const dateFormatee = dateReunion.toLocaleDateString('fr-FR', options);
+    
+    // Formater le range horaire
+    let heureRange = '';
+    if (reunion.heureDebut && reunion.heureFin) {
+      heureRange = ` de ${reunion.heureDebut} à ${reunion.heureFin}`;
+    } else if (reunion.heureDebut) {
+      heureRange = ` à ${reunion.heureDebut}`;
+    }
+    
+    const typeLabel = reunion.type === 'assemblee_generale' 
+      ? 'l\'Assemblée Générale' 
+      : 'la Chambre Syndicale';
+    
+    const organismeLabel = reunion.organisme === 'SAR' 
+      ? 'du SAR' 
+      : 'de l\'AMAIR';
+
+    const objetMail = `Convocation - ${reunion.type === 'assemblee_generale' ? 'Assemblée Générale' : 'Conseil Syndical'} ${organismeLabel}`;
+    
+    const contenuMail = `Bonjour à Tous,
+
+Vous trouverez ci-joint l'invitation à la réunion de ${typeLabel} ${organismeLabel} qui aura lieu le ${dateFormatee}${heureRange} à ${reunion.lieu}.
+
+${reunion.ordresDuJour ? `Ordre du jour :\n${reunion.ordresDuJour}\n\n` : ''}Cordialement,
+Le Bureau`;
+
+    res.json({
+      message: 'Convocation préparée avec succès',
+      pdfUrl: pdfResult.url,
+      pdfKey: pdfResult.key,
+      pdfFileName: pdfResult.fileName,
+      membresConvoques: membresData.length,
+      objetMail,
+      contenuMail,
+      destinataires: membresData.filter(m => m.email).map(m => ({
+        nom: m.nom,
+        prenom: m.prenom,
+        email: m.email,
+      })),
+    });
+  } catch (error) {
+    console.error('Erreur préparation convocation:', error);
+    res.status(500);
+    throw new Error('Erreur lors de la préparation de la convocation');
+  }
+});
+
+// @desc    Envoyer une convocation
+// @route   POST /api/reunions/:id/convoquer
+// @access  Private/Admin
+const envoyerConvocationReunion = asyncHandler(async (req, res) => {
+  const { objet, contenu, pdfKey } = req.body;
+
+  if (!objet || !contenu) {
+    res.status(400);
+    throw new Error('L\'objet et le contenu sont requis');
+  }
+
+  const reunion = await Reunion.findById(req.params.id);
+
+  if (!reunion) {
+    res.status(404);
+    throw new Error('Réunion non trouvée');
+  }
+
+  // Vérifier les permissions
+  const userOrganismes = req.user.organismes || [req.user.organisme];
+  if (req.user.role !== 'super_admin' && !userOrganismes.includes(reunion.organisme)) {
+    res.status(403);
+    throw new Error('Non autorisé');
+  }
+
+  // Vérifier permission convoquer
+  if (req.user.role !== 'super_admin') {
+    const permissions = await Permission.findOne({ userId: req.user._id });
+    if (!permissions?.reunions?.convoquer) {
+      res.status(403);
+      throw new Error('Permission de convoquer non accordée');
+    }
+  }
+
+  // Récupérer les destinataires depuis les présences enregistrées ou les membres actifs
+  let destinataires = [];
+  
+  if (reunion.presences && reunion.presences.length > 0) {
+    destinataires = reunion.presences
+      .filter(p => p.email)
+      .map(p => ({
+        nom: p.nom,
+        prenom: p.prenom,
+        email: p.email,
+      }));
+  } else {
+    // Fallback: récupérer les membres actifs
+    let membres = [];
+    if (reunion.type === 'assemblee_generale') {
+      membres = await MembreConseil.find({
+        organisme: reunion.organisme,
+        estBureau: true,
+        actif: true,
+      }).populate('adherent', 'nom prenom email');
+    } else {
+      membres = await MembreConseil.find({
+        organisme: reunion.organisme,
+        estConseil: true,
+        actif: true,
+      }).populate('adherent', 'nom prenom email');
+    }
+    
+    destinataires = membres
+      .filter(m => m.adherent?.email)
+      .map(m => ({
+        nom: m.adherent.nom,
+        prenom: m.adherent.prenom,
+        email: m.adherent.email,
+      }));
+  }
 
   if (destinataires.length === 0) {
     res.status(400);
     throw new Error('Aucun destinataire avec email valide');
   }
 
+  // Récupérer le PDF si une clé est fournie
+  let pdfAttachment = null;
+  const convocationKey = pdfKey || reunion.convocationPdf?.key;
+  if (convocationKey) {
+    try {
+      const pdfUrl = await s3Service.getSignedUrl(convocationKey);
+      pdfAttachment = {
+        url: pdfUrl,
+        name: reunion.convocationPdf?.nom || 'convocation.pdf',
+        key: convocationKey,
+      };
+    } catch (err) {
+      console.warn('Impossible de récupérer le PDF de convocation:', err.message);
+    }
+  }
+
   try {
     const result = await envoyerConvocation(
       destinataires,
       { objet, contenu },
-      reunion.organisme
+      reunion.organisme,
+      pdfAttachment
     );
 
-    // Enregistrer la date de convocation si au moins un email a été envoyé
+    // Enregistrer la date de convocation et faire le snapshot des présences si au moins un email a été envoyé
     if (result.emailsEnvoyes > 0) {
       reunion.dateConvocation = new Date();
+      
+      // Snapshot des membres pour le suivi des présences (fait au moment de l'envoi)
+      let membres = [];
+      if (reunion.type === 'assemblee_generale') {
+        membres = await MembreConseil.find({
+          organisme: reunion.organisme,
+          estBureau: true,
+          actif: true,
+        }).populate('adherent', 'nom prenom email');
+      } else {
+        membres = await MembreConseil.find({
+          organisme: reunion.organisme,
+          estConseil: true,
+          actif: true,
+        }).populate('adherent', 'nom prenom email');
+      }
+
+      reunion.presences = membres
+        .filter(m => m.adherent)
+        .map(m => ({
+          membre: m._id,
+          user: m.adherent._id,
+          nom: m.adherent.nom,
+          prenom: m.adherent.prenom,
+          email: m.adherent.email,
+          fonction: m.fonction,
+          estBureau: m.estBureau,
+          estConseil: m.estConseil,
+          statut: 'absent', // Par défaut
+        }));
+
       await reunion.save();
     }
 
@@ -609,6 +824,132 @@ const envoyerConvocationReunion = asyncHandler(async (req, res) => {
   }
 });
 
+// @desc    Mettre à jour le statut de présence d'un membre
+// @route   PUT /api/reunions/:id/presences/:membreId
+// @access  Private/Admin
+const updatePresence = asyncHandler(async (req, res) => {
+  const { statut } = req.body;
+  const { id, membreId } = req.params;
+
+  if (!['present', 'absent', 'excuse'].includes(statut)) {
+    res.status(400);
+    throw new Error('Statut invalide. Doit être: present, absent ou excuse');
+  }
+
+  const reunion = await Reunion.findById(id);
+
+  if (!reunion) {
+    res.status(404);
+    throw new Error('Réunion non trouvée');
+  }
+
+  // Vérifier les permissions
+  const userOrganismes = req.user.organismes || [req.user.organisme];
+  if (req.user.role !== 'super_admin' && !userOrganismes.includes(reunion.organisme)) {
+    res.status(403);
+    throw new Error('Non autorisé');
+  }
+
+  // Trouver le membre dans les présences
+  const presenceIndex = reunion.presences.findIndex(
+    p => p._id.toString() === membreId || p.membre?.toString() === membreId || p.user?.toString() === membreId
+  );
+
+  if (presenceIndex === -1) {
+    res.status(404);
+    throw new Error('Membre non trouvé dans cette réunion');
+  }
+
+  // Mettre à jour le statut
+  reunion.presences[presenceIndex].statut = statut;
+  await reunion.save();
+
+  res.json({
+    message: 'Présence mise à jour',
+    presence: reunion.presences[presenceIndex],
+  });
+});
+
+// @desc    Mettre à jour toutes les présences en masse
+// @route   PUT /api/reunions/:id/presences
+// @access  Private/Admin
+const updateAllPresences = asyncHandler(async (req, res) => {
+  const { presences } = req.body;
+  const { id } = req.params;
+
+  if (!Array.isArray(presences)) {
+    res.status(400);
+    throw new Error('Les présences doivent être un tableau');
+  }
+
+  const reunion = await Reunion.findById(id);
+
+  if (!reunion) {
+    res.status(404);
+    throw new Error('Réunion non trouvée');
+  }
+
+  // Vérifier les permissions
+  const userOrganismes = req.user.organismes || [req.user.organisme];
+  if (req.user.role !== 'super_admin' && !userOrganismes.includes(reunion.organisme)) {
+    res.status(403);
+    throw new Error('Non autorisé');
+  }
+
+  // Mettre à jour chaque présence
+  presences.forEach(({ membreId, statut }) => {
+    if (!['present', 'absent', 'excuse'].includes(statut)) return;
+    
+    const presenceIndex = reunion.presences.findIndex(
+      p => p._id.toString() === membreId || p.membre?.toString() === membreId || p.user?.toString() === membreId
+    );
+    
+    if (presenceIndex !== -1) {
+      reunion.presences[presenceIndex].statut = statut;
+    }
+  });
+
+  await reunion.save();
+
+  res.json({
+    message: 'Présences mises à jour',
+    presences: reunion.presences,
+  });
+});
+
+// @desc    Récupérer le PDF de convocation
+// @route   GET /api/reunions/:id/convocation-pdf
+// @access  Private/Admin
+const getConvocationPdf = asyncHandler(async (req, res) => {
+  const reunion = await Reunion.findById(req.params.id);
+
+  if (!reunion) {
+    res.status(404);
+    throw new Error('Réunion non trouvée');
+  }
+
+  // Vérifier les permissions
+  const userOrganismes = req.user.organismes || [req.user.organisme];
+  if (req.user.role !== 'super_admin' && !userOrganismes.includes(reunion.organisme)) {
+    res.status(403);
+    throw new Error('Non autorisé');
+  }
+
+  if (!reunion.convocationPdf?.key) {
+    res.status(404);
+    throw new Error('Aucun PDF de convocation disponible');
+  }
+
+  try {
+    const url = await s3Service.getSignedUrl(reunion.convocationPdf.key);
+    res.json({ url });
+  } catch (error) {
+    console.error('Erreur récupération PDF convocation:', error);
+    res.status(500);
+    throw new Error('Erreur lors de la récupération du PDF');
+  }
+});
+
 module.exports = {
   createReunion,
   getReunions,
@@ -621,5 +962,9 @@ module.exports = {
   generateEmargement,
   deleteEmargement,
   getMembresConvocation,
+  preparerConvocation,
   envoyerConvocationReunion,
+  updatePresence,
+  updateAllPresences,
+  getConvocationPdf,
 };

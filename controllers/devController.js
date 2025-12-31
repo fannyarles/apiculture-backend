@@ -179,7 +179,7 @@ const PDF_TYPES = {
   },
   bulletin_amair: {
     name: 'Bulletin d\'adhésion AMAIR',
-    description: 'Bulletin d\'adhésion à l\'Association Maison de l\'Apiculture',
+    description: 'Bulletin d\'adhésion à l\'Association de la Maison de l\'Apiculture',
   },
   attestation_sar: {
     name: 'Attestation d\'adhésion SAR',

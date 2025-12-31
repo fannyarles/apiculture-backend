@@ -343,8 +343,8 @@ const envoyerEmailAvecPieceJointe = async (destinataire, sujet, contenuHtml, pie
   }
 };
 
-// Envoyer une convocation de réunion
-const envoyerConvocation = async (destinataires, convocation, organisme) => {
+// Envoyer une convocation de réunion (avec pièce jointe optionnelle)
+const envoyerConvocation = async (destinataires, convocation, organisme, pdfAttachment = null) => {
   const BATCH_SIZE = parseInt(process.env.EMAIL_BATCH_SIZE) || 10;
   const BATCH_DELAY = parseInt(process.env.EMAIL_BATCH_DELAY_MS) || 1000;
 
@@ -359,29 +359,41 @@ const envoyerConvocation = async (destinataires, convocation, organisme) => {
   const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
   const htmlContent = getEmailTemplate(convocation.contenu, organisme, frontendUrl);
 
-  console.log(`📧 Convocation "${convocation.objet}" - Envoi à ${destinataires.length} membres`);
+  console.log(`📧 Convocation "${convocation.objet}" - Envoi à ${destinataires.length} membres${pdfAttachment ? ' (avec PJ)' : ''}`);
 
   for (let i = 0; i < destinataires.length; i += BATCH_SIZE) {
     const batch = destinataires.slice(i, i + BATCH_SIZE);
 
     const results = await Promise.allSettled(
       batch.map(async (destinataire) => {
+        const emailData = {
+          sender: {
+            email: emailFrom,
+            name: organisme === 'SAR' ? 'SAR - Syndicat Apicole' : 'AMAIR - Association Apicole'
+          },
+          to: [
+            {
+              email: destinataire.email,
+              name: `${destinataire.prenom} ${destinataire.nom}`
+            }
+          ],
+          subject: convocation.objet,
+          htmlContent: htmlContent
+        };
+
+        // Ajouter la pièce jointe si présente
+        if (pdfAttachment && pdfAttachment.url) {
+          emailData.attachment = [
+            {
+              url: pdfAttachment.url,
+              name: pdfAttachment.name || 'convocation.pdf'
+            }
+          ];
+        }
+
         const response = await axios.post(
           'https://api.brevo.com/v3/smtp/email',
-          {
-            sender: {
-              email: emailFrom,
-              name: organisme === 'SAR' ? 'SAR - Syndicat Apicole' : 'AMAIR - Association Apicole'
-            },
-            to: [
-              {
-                email: destinataire.email,
-                name: `${destinataire.prenom} ${destinataire.nom}`
-              }
-            ],
-            subject: convocation.objet,
-            htmlContent: htmlContent
-          },
+          emailData,
           {
             headers: {
               'api-key': process.env.BREVO_API_KEY,

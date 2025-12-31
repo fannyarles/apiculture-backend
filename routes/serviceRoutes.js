@@ -14,6 +14,7 @@ const {
   canSubscribeUNAF,
   modifyUNAFSubscription,
   confirmUNAFModification,
+  downloadServiceAttestation,
 } = require('../controllers/serviceController');
 const { protect, admin } = require('../middleware/authMiddleware');
 
@@ -36,6 +37,7 @@ router.get('/admin/services-status', protect, admin, getServicesStatusByAdhesion
 router.put('/:id/caution', protect, admin, updateCautionStatus);
 
 // Routes avec paramètres - DOIVENT être après les routes spécifiques
+router.get('/:id/attestation/:type', protect, downloadServiceAttestation);
 router.get('/:id', protect, getServiceById);
 
 module.exports = router;

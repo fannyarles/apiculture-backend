@@ -3,6 +3,20 @@ const bcrypt = require('bcryptjs');
 
 const userSchema = mongoose.Schema(
   {
+    typePersonne: {
+      type: String,
+      enum: ['personne_physique', 'association', 'scea', 'etablissement_public'],
+      default: 'personne_physique',
+    },
+    designation: {
+      type: String,
+      enum: ['M.', 'Mme', '', null],
+      default: null,
+    },
+    raisonSociale: {
+      type: String,
+      required: false,
+    },
     prenom: {
       type: String,
       required: [true, 'Le prénom est requis'],

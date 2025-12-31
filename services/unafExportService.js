@@ -24,7 +24,7 @@ const EXPORT_DATES_2026 = [
 ];
 
 // Chemin vers le template Excel
-const TEMPLATE_PATH = path.join(__dirname, '../../REFERENCE/Listingstructure2026miseàjour.xlsx');
+const TEMPLATE_PATH = path.join(__dirname, '../uploads/UNAF/SAR_Listingstructure2026miseàjour.xlsx');
 
 /**
  * Vérifie si une date est une date d'export
@@ -103,6 +103,7 @@ const getUnexportedPayments = async (annee) => {
       datePaiement: service.paiement.datePaiement,
       options: service.unafData?.options,
       informations: service.informationsPersonnelles,
+      unafData: service.unafData,
     });
   }
 
@@ -164,9 +165,14 @@ const generateUNAFExcel = async (annee, exportDate = new Date()) => {
     console.error('Erreur lecture template Excel:', fileError);
     throw new Error(`Impossible de lire le template Excel: ${fileError.message}`);
   }
+
+  // Forcer Excel à recalculer toutes les formules à l'ouverture du fichier
+  workbook.calcProperties = workbook.calcProperties || {};
+  workbook.calcProperties.fullCalcOnLoad = true;
   
   // Récupérer la première feuille (par index ou par nom)
   let worksheet = workbook.getWorksheet(1);
+
   if (!worksheet) {
     // Essayer de récupérer par nom ou la première feuille disponible
     worksheet = workbook.worksheets[0];
@@ -208,6 +214,7 @@ const generateUNAFExcel = async (annee, exportDate = new Date()) => {
   for (const payment of payments) {
     const row = worksheet.getRow(currentRow);
     const info = payment.informations || {};
+    const unafData = payment.unafData || {};
     const options = payment.options || {};
 
     // A : Nom
@@ -230,6 +237,12 @@ const generateUNAFExcel = async (annee, exportDate = new Date()) => {
     // J - K : Téléphone
     row.getCell('J').value = info.telephone || '';
     row.getCell('K').value = info.telephoneMobile || '';
+    
+    // L : SIRET
+    row.getCell('L').value = unafData.siret || '';
+    
+    // M : Nb ruches
+    row.getCell('M').value = unafData.nombreRuches || '';
     
     // N : "1" si cotisation individuelle (toujours 1 pour UNAF)
     row.getCell('N').value = 1;
@@ -276,7 +289,7 @@ const generateUNAFExcel = async (annee, exportDate = new Date()) => {
       row.getCell('U').value = 1;
       counts.affairesJuridiques++;
     }
-
+    
     row.commit();
     currentRow++;
     montantTotal += payment.montant || 0;
@@ -301,7 +314,7 @@ const generateUNAFExcel = async (annee, exportDate = new Date()) => {
   worksheet.getCell('AA20').value = counts.formule2;
   worksheet.getCell('AA21').value = counts.formule3;
   worksheet.getCell('AA22').value = counts.affairesJuridiques;
-
+  
   // Générer le buffer Excel
   const buffer = await workbook.xlsx.writeBuffer();
 

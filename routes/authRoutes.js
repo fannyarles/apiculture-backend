@@ -11,6 +11,7 @@ const {
   checkEmail,
   forgotPassword,
   resetPassword,
+  contactAdmin,
 } = require('../controllers/authController');
 const { protect, admin } = require('../middleware/authMiddleware');
 
@@ -26,6 +27,7 @@ router.get('/profile', protect, getUserProfile);
 router.get('/me', protect, getUserProfile); // Alias pour compatibilité frontend
 router.put('/profile', protect, updateUserProfile);
 router.put('/password', protect, changePassword);
+router.post('/contact-admin', protect, contactAdmin);
 
 // Routes admin
 router.get('/users', protect, admin, getUsers);

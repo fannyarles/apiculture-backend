@@ -176,6 +176,11 @@ const permissionSchema = mongoose.Schema(
         default: false,
         description: 'Accès à la liste des utilisateurs',
       },
+      editUsers: {
+        type: Boolean,
+        default: false,
+        description: 'Éditer les informations des utilisateurs',
+      },
     },
     // Module Finances (Stripe)
     finances: {
@@ -251,6 +256,7 @@ permissionSchema.statics.createDefaultPermissions = async function (userId, role
     },
     users: {
       access: false,
+      editUsers: false,
     },
     finances: {
       access: false,

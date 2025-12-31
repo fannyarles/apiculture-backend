@@ -131,22 +131,34 @@ const generateEmargementPDF = async (reunion) => {
       year: 'numeric',
     });
     
+    // Formater le range horaire
+    let heureRange = '-';
+    if (reunion.heureDebut && reunion.heureFin) {
+      heureRange = `${reunion.heureDebut} - ${reunion.heureFin}`;
+    } else if (reunion.heureDebut) {
+      heureRange = reunion.heureDebut;
+    } else if (reunion.heureFin) {
+      heureRange = `jusqu'à ${reunion.heureFin}`;
+    }
+    
     const infoTableLeft = 50;
-    const infoColWidth = 247;
+    const infoColWidth = 165;
     const infoLabelSize = 9;
     const infoValueSize = 11;
     const infoRowHeight = 28;
     
     let infoY = doc.y;
     
-    // Ligne : Date | Lieu
+    // Ligne : Date | Horaire | Lieu
     doc.fontSize(infoLabelSize).fillColor('#747474').font('Helvetica');
     doc.text('DATE', infoTableLeft, infoY);
-    doc.text('LIEU', infoTableLeft + infoColWidth, infoY);
+    doc.text('HORAIRE', infoTableLeft + infoColWidth, infoY);
+    doc.text('LIEU', infoTableLeft + infoColWidth * 2, infoY);
     
     doc.fontSize(infoValueSize).fillColor('#000000');
     doc.text(dateFormatted, infoTableLeft, infoY + 10);
-    doc.text(reunion.lieu || '-', infoTableLeft + infoColWidth, infoY + 10);
+    doc.text(heureRange, infoTableLeft + infoColWidth, infoY + 10);
+    doc.text(reunion.lieu || '-', infoTableLeft + infoColWidth * 2, infoY + 10);
     
     infoY += infoRowHeight;
     doc.y = infoY;

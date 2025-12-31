@@ -175,6 +175,7 @@ const getPermissionsStructure = asyncHandler(async (req, res) => {
       icon: 'UsersIcon',
       permissions: [
         { key: 'access', label: 'Accès au module', description: 'Accéder à la liste des utilisateurs' },
+        { key: 'editUsers', label: 'Éditer les utilisateurs', description: 'Modifier les informations des utilisateurs' },
       ],
     },
     finances: {

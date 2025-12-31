@@ -6,6 +6,14 @@ const reunionSchema = mongoose.Schema(
       type: Date,
       required: [true, 'La date est requise'],
     },
+    heureDebut: {
+      type: String,
+      trim: true,
+    },
+    heureFin: {
+      type: String,
+      trim: true,
+    },
     type: {
       type: String,
       required: [true, 'Le type de réunion est requis'],
@@ -17,6 +25,10 @@ const reunionSchema = mongoose.Schema(
       trim: true,
     },
     notes: {
+      type: String,
+      trim: true,
+    },
+    ordresDuJour: {
       type: String,
       trim: true,
     },
@@ -66,6 +78,39 @@ const reunionSchema = mongoose.Schema(
     dateConvocation: {
       type: Date,
       default: null,
+    },
+    // Liste des membres convoqués avec leur statut de présence
+    presences: [
+      {
+        membre: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: 'MembreConseil',
+        },
+        user: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: 'User',
+        },
+        // Snapshot des informations pour historique
+        nom: String,
+        prenom: String,
+        email: String,
+        fonction: String,
+        estBureau: Boolean,
+        estConseil: Boolean,
+        // Statut de présence
+        statut: {
+          type: String,
+          enum: ['present', 'absent', 'excuse'],
+          default: 'absent',
+        },
+      },
+    ],
+    // Document de convocation généré
+    convocationPdf: {
+      nom: String,
+      key: String,
+      url: String,
+      dateGeneration: Date,
     },
   },
   {

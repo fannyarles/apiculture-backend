@@ -103,7 +103,7 @@ const getUserById = asyncHandler(async (req, res) => {
   }
 
   const user = await User.findById(id)
-    .select('nom prenom email telephone dateNaissance adresse role createdAt');
+    .select('nom prenom type designation raisonSociale email telephone telephoneMobile dateNaissance adresse role createdAt');
 
   if (!user) {
     res.status(404);
@@ -126,7 +126,101 @@ const getUserById = asyncHandler(async (req, res) => {
   });
 });
 
+// @desc    Modifier un utilisateur
+// @route   PUT /api/users-management/:id
+// @access  Private/Admin (avec permission editUsers)
+const updateUser = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { nom, prenom, email, telephone, telephoneMobile, dateNaissance, adresse, napi, siret, typePersonne, designation, raisonSociale } = req.body;
+
+  // Vérifier les permissions
+  const isSuperAdmin = req.user.role === 'super_admin';
+  const permissions = await Permission.findOne({ userId: req.user._id });
+  
+  if (!isSuperAdmin && !permissions?.users?.editUsers) {
+    res.status(403);
+    throw new Error('Permission non autorisée pour modifier les utilisateurs');
+  }
+
+  // Trouver l'utilisateur
+  const user = await User.findById(id);
+
+  if (!user) {
+    res.status(404);
+    throw new Error('Utilisateur non trouvé');
+  }
+
+  // Vérifier que l'utilisateur n'est pas un admin
+  if (user.role !== 'user') {
+    res.status(403);
+    throw new Error('Impossible de modifier un administrateur');
+  }
+
+  // Si admin non super_admin, vérifier que l'utilisateur appartient à son organisme
+  if (!isSuperAdmin && req.user.organisme) {
+    const userAdhesions = await Adhesion.find({ 
+      user: id, 
+      organisme: req.user.organisme 
+    });
+    
+    if (userAdhesions.length === 0) {
+      res.status(403);
+      throw new Error('Vous ne pouvez modifier que les utilisateurs de votre organisme');
+    }
+  }
+
+  // Vérifier si l'email est déjà utilisé par un autre utilisateur
+  if (email && email !== user.email) {
+    const emailExists = await User.findOne({ email, _id: { $ne: id } });
+    if (emailExists) {
+      res.status(400);
+      throw new Error('Cet email est déjà utilisé par un autre utilisateur');
+    }
+  }
+
+  // Mettre à jour les champs
+  if (nom !== undefined) user.nom = nom;
+  if (prenom !== undefined) user.prenom = prenom;
+  if (email !== undefined) user.email = email;
+  if (telephone !== undefined) user.telephone = telephone;
+  if (telephoneMobile !== undefined) user.telephoneMobile = telephoneMobile;
+  if (dateNaissance !== undefined) user.dateNaissance = dateNaissance;
+  if (napi !== undefined) user.napi = napi;
+  if (siret !== undefined) user.siret = siret;
+  if (typePersonne !== undefined) user.typePersonne = typePersonne;
+  if (designation !== undefined) user.designation = designation;
+  if (raisonSociale !== undefined) user.raisonSociale = raisonSociale;
+  
+  // Mettre à jour l'adresse si fournie
+  if (adresse) {
+    user.adresse = {
+      ...user.adresse,
+      ...adresse,
+    };
+  }
+
+  await user.save();
+
+  res.json({
+    _id: user._id,
+    nom: user.nom,
+    prenom: user.prenom,
+    email: user.email,
+    telephone: user.telephone,
+    telephoneMobile: user.telephoneMobile,
+    dateNaissance: user.dateNaissance,
+    adresse: user.adresse,
+    napi: user.napi,
+    siret: user.siret,
+    typePersonne: user.typePersonne,
+    designation: user.designation,
+    raisonSociale: user.raisonSociale,
+    message: 'Utilisateur mis à jour avec succès',
+  });
+});
+
 module.exports = {
   getUsers,
   getUserById,
+  updateUser,
 };

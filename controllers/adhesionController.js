@@ -258,6 +258,9 @@ const createAdhesion = asyncHandler(async (req, res) => {
       commune: localisation?.commune,
     },
     informationsPersonnelles: {
+      typePersonne: informationsPersonnelles?.typePersonne,
+      designation: informationsPersonnelles?.designation,
+      raisonSociale: informationsPersonnelles?.raisonSociale,
       nom: informationsPersonnelles?.nom,
       prenom: informationsPersonnelles?.prenom,
       dateNaissance: informationsPersonnelles?.dateNaissance,
@@ -267,6 +270,7 @@ const createAdhesion = asyncHandler(async (req, res) => {
         ville: informationsPersonnelles?.adresse?.ville,
       },
       telephone: informationsPersonnelles?.telephone,
+      telephoneMobile: informationsPersonnelles?.telephoneMobile,
       email: informationsPersonnelles?.email,
     },
     informationsSpecifiques: informationsSpecifiques || {},
@@ -286,6 +290,27 @@ const createAdhesion = asyncHandler(async (req, res) => {
     'user',
     'prenom nom email telephone adresse dateNaissance'
   );
+
+  // Synchroniser les informations personnelles avec le profil utilisateur
+  try {
+    const userToUpdate = await User.findById(req.user._id);
+    if (userToUpdate) {
+      // Mettre à jour les champs du profil avec les informations de l'adhésion
+      if (informationsPersonnelles?.telephoneMobile) userToUpdate.telephoneMobile = informationsPersonnelles.telephoneMobile;
+      if (informationsPersonnelles?.designation) userToUpdate.designation = informationsPersonnelles.designation;
+      if (informationsPersonnelles?.typePersonne) userToUpdate.typePersonne = informationsPersonnelles.typePersonne;
+      if (informationsPersonnelles?.raisonSociale) userToUpdate.raisonSociale = informationsPersonnelles.raisonSociale;
+      if (informationsPersonnelles?.telephone) userToUpdate.telephone = informationsPersonnelles.telephone;
+      if (informationsPersonnelles?.adresse) userToUpdate.adresse = informationsPersonnelles.adresse;
+      if (informationsPersonnelles?.dateNaissance) userToUpdate.dateNaissance = informationsPersonnelles.dateNaissance;
+      
+      await userToUpdate.save();
+      console.log(`✅ Profil utilisateur synchronisé pour ${userToUpdate._id}`);
+    }
+  } catch (syncError) {
+    console.error('Erreur synchronisation profil:', syncError);
+    // Ne pas bloquer la création de l'adhésion si la synchronisation échoue
+  }
 
   // Générer et uploader le bulletin d'adhésion
   try {

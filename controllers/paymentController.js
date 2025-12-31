@@ -336,10 +336,23 @@ const handleStripeWebhook = asyncHandler(async (req, res) => {
           // Générer l'attestation si le service est actif
           if (service.status === 'actif') {
             try {
-              const { generateAndUploadServiceAttestation } = require('../services/pdfService');
+              const { generateAndUploadServiceAttestation, generateAndUploadEcocontributionAttestation } = require('../services/pdfService');
               const attestationResult = await generateAndUploadServiceAttestation(service);
               service.attestationKey = attestationResult.key;
               service.attestationUrl = attestationResult.url;
+              
+              // Si c'est un service UNAF avec écocontribution, générer l'attestation écocontribution
+              if (service.typeService === 'assurance_unaf' && service.unafData?.options?.ecocontribution?.souscrit) {
+                try {
+                  const ecoResult = await generateAndUploadEcocontributionAttestation(service);
+                  service.ecocontributionAttestationKey = ecoResult.key;
+                  service.ecocontributionAttestationUrl = ecoResult.url;
+                  console.log('Attestation écocontribution générée:', ecoResult.fileName);
+                } catch (ecoError) {
+                  console.error('Erreur génération attestation écocontribution:', ecoError);
+                }
+              }
+              
               await service.save();
             } catch (attestationError) {
               console.error('Erreur génération attestation service:', attestationError);
@@ -991,10 +1004,23 @@ const markServicePaymentAsPaid = asyncHandler(async (req, res) => {
   // Générer l'attestation si le service est actif
   if (service.status === 'actif') {
     try {
-      const { generateAndUploadServiceAttestation } = require('../services/pdfService');
+      const { generateAndUploadServiceAttestation, generateAndUploadEcocontributionAttestation } = require('../services/pdfService');
       const attestationResult = await generateAndUploadServiceAttestation(service);
       service.attestationKey = attestationResult.key;
       service.attestationUrl = attestationResult.url;
+      
+      // Si c'est un service UNAF avec écocontribution, générer l'attestation écocontribution
+      if (service.typeService === 'assurance_unaf' && service.unafData?.options?.ecocontribution?.souscrit) {
+        try {
+          const ecoResult = await generateAndUploadEcocontributionAttestation(service);
+          service.ecocontributionAttestationKey = ecoResult.key;
+          service.ecocontributionAttestationUrl = ecoResult.url;
+          console.log('Attestation écocontribution générée:', ecoResult.fileName);
+        } catch (ecoError) {
+          console.error('Erreur génération attestation écocontribution:', ecoError);
+        }
+      }
+      
       await service.save();
     } catch (attestationError) {
       console.error('Erreur génération attestation service:', attestationError);

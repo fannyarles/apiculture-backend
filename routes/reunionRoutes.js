@@ -15,7 +15,11 @@ const {
   generateEmargement,
   deleteEmargement,
   getMembresConvocation,
+  preparerConvocation,
   envoyerConvocationReunion,
+  updatePresence,
+  updateAllPresences,
+  getConvocationPdf,
 } = require('../controllers/reunionController');
 
 // Configuration de multer pour stocker en mémoire (buffer)
@@ -98,7 +102,20 @@ router.route('/:id/emargement')
 router.route('/:id/membres-convocation')
   .get(protect, admin, checkReunionPermission, getMembresConvocation);
 
+router.route('/:id/preparer-convocation')
+  .post(protect, admin, checkReunionPermission, preparerConvocation);
+
 router.route('/:id/convoquer')
   .post(protect, admin, checkReunionPermission, envoyerConvocationReunion);
+
+router.route('/:id/convocation-pdf')
+  .get(protect, admin, checkReunionPermission, getConvocationPdf);
+
+// Routes pour les présences
+router.route('/:id/presences')
+  .put(protect, admin, checkReunionPermission, updateAllPresences);
+
+router.route('/:id/presences/:membreId')
+  .put(protect, admin, checkReunionPermission, updatePresence);
 
 module.exports = router;

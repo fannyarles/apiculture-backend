@@ -112,6 +112,13 @@ const serviceSchema = mongoose.Schema(
     attestationUrl: {
       type: String,
     },
+    // Attestation écocontribution (UNAF)
+    ecocontributionAttestationKey: {
+      type: String,
+    },
+    ecocontributionAttestationUrl: {
+      type: String,
+    },
     // Informations personnelles (snapshot au moment de la souscription)
     informationsPersonnelles: {
       nom: String,

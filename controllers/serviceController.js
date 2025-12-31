@@ -339,12 +339,25 @@ const updateCautionStatus = asyncHandler(async (req, res) => {
   // Générer l'attestation si le service vient de passer en actif
   if (wasNotActive && service.status === 'actif') {
     try {
-      const { generateAndUploadServiceAttestation } = require('../services/pdfService');
+      const { generateAndUploadServiceAttestation, generateAndUploadEcocontributionAttestation } = require('../services/pdfService');
       const populatedService = await Service.findById(service._id)
         .populate('user', 'prenom nom email telephone adresse');
       const attestationResult = await generateAndUploadServiceAttestation(populatedService);
       service.attestationKey = attestationResult.key;
       service.attestationUrl = attestationResult.url;
+      
+      // Si c'est un service UNAF avec écocontribution, générer l'attestation écocontribution
+      if (populatedService.typeService === 'assurance_unaf' && populatedService.unafData?.options?.ecocontribution?.souscrit) {
+        try {
+          const ecoResult = await generateAndUploadEcocontributionAttestation(populatedService);
+          service.ecocontributionAttestationKey = ecoResult.key;
+          service.ecocontributionAttestationUrl = ecoResult.url;
+          console.log('Attestation écocontribution générée:', ecoResult.fileName);
+        } catch (ecoError) {
+          console.error('Erreur génération attestation écocontribution:', ecoError);
+        }
+      }
+      
       await service.save();
     } catch (attestationError) {
       console.error('Erreur génération attestation service:', attestationError);
@@ -793,6 +806,63 @@ const confirmUNAFModification = asyncHandler(async (req, res) => {
   });
 });
 
+// @desc    Télécharger une attestation de service
+// @route   GET /api/services/:id/attestation/:type
+// @access  Private
+const downloadServiceAttestation = asyncHandler(async (req, res) => {
+  const { id, type } = req.params;
+
+  const service = await Service.findById(id).populate('user', '_id');
+
+  if (!service) {
+    res.status(404);
+    throw new Error('Service non trouvé');
+  }
+
+  // Vérifier que l'utilisateur est propriétaire ou admin
+  const isOwner = service.user._id.toString() === req.user._id.toString();
+  const isAdmin = ['admin', 'super_admin'].includes(req.user.role);
+
+  if (!isOwner && !isAdmin) {
+    res.status(403);
+    throw new Error('Non autorisé à accéder à ce fichier');
+  }
+
+  let s3Key;
+  let fileName;
+
+  if (type === 'attestation') {
+    s3Key = service.attestationKey;
+    fileName = `attestation-${service.typeService}-${service.annee}.pdf`;
+  } else if (type === 'ecocontribution') {
+    s3Key = service.ecocontributionAttestationKey;
+    fileName = `attestation-ecocontribution-${service.annee}.pdf`;
+  } else {
+    res.status(400);
+    throw new Error('Type d\'attestation invalide');
+  }
+
+  if (!s3Key) {
+    res.status(404);
+    throw new Error('Attestation non disponible');
+  }
+
+  try {
+    const { downloadFile } = require('../services/s3Service');
+    const fileBuffer = await downloadFile(s3Key);
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    res.setHeader('Content-Length', fileBuffer.length);
+
+    res.send(fileBuffer);
+  } catch (error) {
+    console.error('Erreur téléchargement attestation:', error);
+    res.status(500);
+    throw new Error('Erreur lors du téléchargement de l\'attestation');
+  }
+});
+
 module.exports = {
   createService,
   getMyServices,
@@ -807,4 +877,5 @@ module.exports = {
   canSubscribeUNAF,
   modifyUNAFSubscription,
   confirmUNAFModification,
+  downloadServiceAttestation,
 };

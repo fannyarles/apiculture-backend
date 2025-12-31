@@ -123,6 +123,15 @@ const adhesionSchema = mongoose.Schema(
     },
     // Informations personnelles (snapshot au moment de l'adhésion)
     informationsPersonnelles: {
+      typePersonne: {
+        type: String,
+        enum: ['personne_physique', 'association', 'scea', 'etablissement_public'],
+      },
+      designation: {
+        type: String,
+        enum: ['M.', 'Mme'],
+      },
+      raisonSociale: String,
       nom: String,
       prenom: String,
       dateNaissance: Date,
@@ -132,6 +141,7 @@ const adhesionSchema = mongoose.Schema(
         ville: String,
       },
       telephone: String,
+      telephoneMobile: String,
       email: String,
     },
     // Informations spécifiques par organisme

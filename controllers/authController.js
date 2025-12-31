@@ -145,14 +145,18 @@ const getUserProfile = asyncHandler(async (req, res) => {
         permissions = await Permission.createDefaultPermissions(user._id, user.role);
       }
     }
-
+    
     // Retourner le format attendu par le frontend avec mapping des champs
     res.json({
       _id: user._id,
+      type: user.type,
+      raisonSociale: user.raisonSociale,
+      designation: user.designation,
       prenom: user.prenom,
       nom: user.nom,
       email: user.email,
       telephone: user.telephone,
+      telephoneMobile: user.telephoneMobile,
       adresse: user.adresse,
       dateNaissance: user.dateNaissance,
       role: user.role,
@@ -163,6 +167,9 @@ const getUserProfile = asyncHandler(async (req, res) => {
       isActive: user.isActive,
       // Ajouter personalInfo avec mapping pour compatibilité frontend
       personalInfo: {
+        type: user.type,
+        raisonSociale: user.raisonSociale,
+        designation: user.designation,
         prenom: user.prenom,
         nom: user.nom,
         email: user.email,
@@ -199,6 +206,9 @@ const updateUserProfile = asyncHandler(async (req, res) => {
     if (req.body.telephone !== undefined) user.telephone = req.body.telephone;
     if (req.body.telephoneMobile !== undefined) user.telephoneMobile = req.body.telephoneMobile;
     if (req.body.dateNaissance !== undefined) user.dateNaissance = req.body.dateNaissance;
+    if (req.body.typePersonne !== undefined) user.typePersonne = req.body.typePersonne;
+    if (req.body.designation !== undefined) user.designation = req.body.designation;
+    if (req.body.raisonSociale !== undefined) user.raisonSociale = req.body.raisonSociale;
     
     // Mettre à jour l'adresse (objet complet)
     if (req.body.adresse !== undefined) {
@@ -216,6 +226,9 @@ const updateUserProfile = asyncHandler(async (req, res) => {
       telephoneMobile: updatedUser.telephoneMobile,
       adresse: updatedUser.adresse,
       dateNaissance: updatedUser.dateNaissance,
+      typePersonne: updatedUser.typePersonne,
+      designation: updatedUser.designation,
+      raisonSociale: updatedUser.raisonSociale,
       role: updatedUser.role,
       roles: updatedUser.roles,
       token: generateToken(updatedUser._id),
@@ -402,6 +415,71 @@ const resetPassword = asyncHandler(async (req, res) => {
   });
 });
 
+// @desc    Envoyer un message à l'administrateur
+// @route   POST /api/auth/contact-admin
+// @access  Private
+const contactAdmin = asyncHandler(async (req, res) => {
+  const { message, subject } = req.body;
+
+  if (!message) {
+    res.status(400);
+    throw new Error('Veuillez fournir un message');
+  }
+
+  const user = await User.findById(req.user._id);
+
+  if (!user) {
+    res.status(404);
+    throw new Error('Utilisateur non trouvé');
+  }
+
+  // Email de destination fixe
+  const adminEmail = 'abeillereunion@gmail.com';
+
+  // Contenu de l'email
+  const emailSubject = subject || 'Message d\'un utilisateur';
+  const emailContent = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+      <h2 style="color: #E98E09;">Message d'un utilisateur</h2>
+      
+      <div style="background-color: #f5f5f5; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+        <h3 style="margin-top: 0; color: #333;">Informations de l'utilisateur</h3>
+        <p><strong>Nom :</strong> ${user.prenom} ${user.nom}</p>
+        <p><strong>Email :</strong> ${user.email}</p>
+        <p><strong>Sujet :</strong> ${emailSubject}</p>
+      </div>
+      
+      <div style="background-color: #fff; padding: 15px; border: 1px solid #ddd; border-radius: 8px;">
+        <h3 style="margin-top: 0; color: #333;">Message</h3>
+        <p style="white-space: pre-wrap;">${message}</p>
+      </div>
+      
+      <p style="color: #666; font-size: 12px; margin-top: 20px;">
+        Ce message a été envoyé depuis la plateforme Abeille Réunion.
+      </p>
+    </div>
+  `;
+
+  try {
+    await transporter.sendMail({
+      from: `"Abeille Réunion" <${process.env.SMTP_USER}>`,
+      to: adminEmail,
+      replyTo: user.email,
+      subject: `[Contact] ${emailSubject} - ${user.prenom} ${user.nom}`,
+      html: emailContent,
+    });
+
+    res.json({
+      success: true,
+      message: 'Message envoyé avec succès'
+    });
+  } catch (error) {
+    console.error('Erreur envoi email:', error);
+    res.status(500);
+    throw new Error('Erreur lors de l\'envoi du message');
+  }
+});
+
 module.exports = {
   registerUser,
   loginUser,
@@ -413,4 +491,5 @@ module.exports = {
   checkEmail,
   forgotPassword,
   resetPassword,
+  contactAdmin,
 };
