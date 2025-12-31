@@ -87,6 +87,11 @@ const adhesionSchema = mongoose.Schema(
       enum: ['en_attente', 'paiement_demande', 'actif', 'refuse', 'expiree'],
       default: 'en_attente',
     },
+    // Indicateur nouvel adhérent (pour calcul droit d'entrée)
+    estNouveau: {
+      type: Boolean,
+      default: false,
+    },
     // Notes admin
     notes: {
       type: String,

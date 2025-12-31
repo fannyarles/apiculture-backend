@@ -243,11 +243,22 @@ const createAdhesion = asyncHandler(async (req, res) => {
     });
   }
 
+  // Vérifier si l'utilisateur est un nouvel adhérent pour cet organisme
+  // (n'a jamais eu d'adhésion active pour cet organisme)
+  const previousAdhesions = await Adhesion.find({
+    user: req.user._id,
+    organisme,
+    status: 'actif',
+    _id: { $ne: null } // Exclure l'adhésion actuelle si elle existe
+  });
+  const estNouveau = previousAdhesions.length === 0;
+
   // Créer l'adhésion avec toutes les informations
   const adhesion = await Adhesion.create({
     user: req.user._id,
     organisme,
     annee,
+    estNouveau,
     napi,
     numeroAmexa,
     nombreRuches,
