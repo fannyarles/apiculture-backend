@@ -33,6 +33,7 @@ const createAdhesion = asyncHandler(async (req, res) => {
     paiement,
     signature,
     documents,
+    adhesionAMAIRGratuite,
   } = req.body;
 
   // Parser les champs complexes si ce sont des chaînes JSON
@@ -285,6 +286,7 @@ const createAdhesion = asyncHandler(async (req, res) => {
       email: informationsPersonnelles?.email,
     },
     informationsSpecifiques: informationsSpecifiques || {},
+    adhesionAMAIRGratuite: adhesionAMAIRGratuite === true || adhesionAMAIRGratuite === 'true',
     signature,
     paiement: {
       montant,
