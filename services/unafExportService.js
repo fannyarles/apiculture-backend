@@ -24,7 +24,7 @@ const EXPORT_DATES_2026 = [
 ];
 
 // Chemin vers le template Excel
-const TEMPLATE_PATH = path.join(__dirname, '../uploads/UNAF/SAR_Listingstructure2026miseàjour.xlsx');
+const TEMPLATE_PATH = path.join(__dirname, '../uploads/unaf/SAR_Listingstructure2026miseajour.xlsx');
 
 /**
  * Vérifie si une date est une date d'export
@@ -289,7 +289,7 @@ const generateUNAFExcel = async (annee, exportDate = new Date()) => {
       row.getCell('U').value = 1;
       counts.affairesJuridiques++;
     }
-    
+
     row.commit();
     currentRow++;
     montantTotal += payment.montant || 0;
