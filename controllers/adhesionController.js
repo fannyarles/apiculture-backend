@@ -5,6 +5,7 @@ const User = require('../models/userModel');
 const nodemailer = require('nodemailer');
 const { generateAndUploadAdhesionPDF, generateAndUploadBulletinAdhesion } = require('../services/pdfService');
 const { getSignedUrl } = require('../services/s3Service');
+const { notifyAdminsNewAdhesion } = require('../services/adminNotificationService');
 
 // Configuration du transporteur SMTP
 const transporter = nodemailer.createTransport({
@@ -250,6 +251,7 @@ const createAdhesion = asyncHandler(async (req, res) => {
     user: req.user._id,
     organisme,
     status: 'actif',
+    annee: annee - 1,
     _id: { $ne: null } // Exclure l'adhésion actuelle si elle existe
   });
   const estNouveau = previousAdhesions.length === 0;
@@ -354,6 +356,14 @@ const createAdhesion = asyncHandler(async (req, res) => {
     } catch (error) {
       console.error('Erreur génération attestation:', error);
     }
+  }
+
+  // Notifier les admins concernés de la nouvelle adhésion
+  try {
+    await notifyAdminsNewAdhesion(populatedAdhesion);
+  } catch (notifError) {
+    console.error('Erreur notification admins:', notifError);
+    // Ne pas bloquer la création de l'adhésion si la notification échoue
   }
 
   res.status(201).json(populatedAdhesion);

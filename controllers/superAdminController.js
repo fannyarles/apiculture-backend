@@ -1,5 +1,6 @@
 const User = require('../models/userModel');
 const Permission = require('../models/permissionModel');
+const NotificationSettings = require('../models/notificationSettingsModel');
 const { envoyerEmailBienvenueAdmin } = require('../services/emailService');
 
 // @desc    Get all admins
@@ -8,7 +9,25 @@ const { envoyerEmailBienvenueAdmin } = require('../services/emailService');
 const getAdmins = async (req, res) => {
   try {
     const admins = await User.find({ role: 'admin' }).select('-password');
-    res.json(admins);
+    
+    // Ajouter les permissions et les paramètres de notification pour chaque admin
+    const adminsWithDetails = await Promise.all(
+      admins.map(async (admin) => {
+        const adminObj = admin.toObject();
+        
+        // Récupérer les permissions
+        const permissions = await Permission.findOne({ userId: admin._id });
+        adminObj.permissions = permissions || null;
+        
+        // Récupérer les paramètres de notification
+        const notificationSettings = await NotificationSettings.findOne({ userId: admin._id });
+        adminObj.notificationSettings = notificationSettings || null;
+        
+        return adminObj;
+      })
+    );
+    
+    res.json(adminsWithDetails);
   } catch (error) {
     res.status(500).json({ message: 'Erreur serveur', error: error.message });
   }

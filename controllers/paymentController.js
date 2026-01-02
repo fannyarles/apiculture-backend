@@ -5,6 +5,7 @@ const Adhesion = require('../models/adhesionModel');
 const Service = require('../models/serviceModel');
 const Permission = require('../models/permissionModel');
 const { generateAndUploadAttestation } = require('../services/pdfService');
+const { notifyAdminsAdhesionPayment, notifyAdminsServicePayment } = require('../services/adminNotificationService');
 
 // Configuration du transporteur SMTP
 const transporter = nodemailer.createTransport({
@@ -439,6 +440,13 @@ const handleStripeWebhook = asyncHandler(async (req, res) => {
             html: emailContent,
           });
 
+          // Notifier les admins du paiement de service
+          try {
+            await notifyAdminsServicePayment(service);
+          } catch (notifError) {
+            console.error('Erreur notification admins (service):', notifError);
+          }
+
           console.log(`✅ Paiement confirmé pour le service ${service._id}`);
         }
         
@@ -703,8 +711,12 @@ const handleStripeWebhook = asyncHandler(async (req, res) => {
           html: emailContent,
         });
 
-        // Envoyer notification à l'admin (optionnel)
-        // Vous pouvez ajouter une notification admin ici si nécessaire
+        // Notifier les admins du paiement d'adhésion
+        try {
+          await notifyAdminsAdhesionPayment(adhesion);
+        } catch (notifError) {
+          console.error('Erreur notification admins (adhésion):', notifError);
+        }
 
         console.log(`✅ Paiement confirmé pour l'adhésion ${adhesion._id}`);
       }

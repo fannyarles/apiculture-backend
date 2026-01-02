@@ -58,6 +58,8 @@ app.use('/users', require('./routes/superAdminRoutes'));
 console.log('✅ /users');
 app.use('/permissions', require('./routes/permissionRoutes'));
 console.log('✅ /permissions');
+app.use('/notification-settings', require('./routes/notificationSettingsRoutes'));
+console.log('✅ /notification-settings');
 app.use('/services', require('./routes/serviceRoutes'));
 console.log('✅ /services');
 app.use('/composition', require('./routes/compositionRoutes'));

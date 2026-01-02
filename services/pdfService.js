@@ -3,8 +3,8 @@ const { uploadFile, downloadFile } = require('./s3Service');
 const path = require('path');
 const fs = require('fs');
 
-// Chemins vers les logos des organismes
-const LOGOS_PATH = path.join(__dirname, '../../frontend/public/logos');
+// Chemins vers les logos des organismes (dans le dossier backend pour fonctionner en production)
+const LOGOS_PATH = path.join(__dirname, '../uploads/logos');
 
 /**
  * Nettoie une chaîne pour l'utiliser dans un nom de fichier
@@ -294,15 +294,19 @@ const generateAttestationPDF = async (adhesion) => {
          .font('Helvetica')
          .fillColor('#000000');
 
-      const user = adhesion.user;
+      const user = adhesion.user || {};
       const infosPerso = adhesion.informationsPersonnelles || {};
+      
+      // Récupérer nom/prénom depuis infosPerso en priorité, puis user
+      const nom = infosPerso.nom || user.nom || '';
+      const prenom = infosPerso.prenom || user.prenom || '';
       
       // Vérifier si c'est une personne morale
       const attTypePersonne = infosPerso.typePersonne || user.typePersonne || 'personne_physique';
       const attIsPersonneMorale = ['association', 'scea', 'etablissement_public'].includes(attTypePersonne);
       const attTypeLabels = { personne_physique: 'Personne physique', association: 'Association', scea: 'SCEA', etablissement_public: 'Établissement public' };
       const attDesignation = infosPerso.designation || user.designation || '';
-      const nomComplet = attDesignation ? `${attDesignation} ${user.nom} ${user.prenom}` : `${user.nom} ${user.prenom}`;
+      const nomComplet = attDesignation ? `${attDesignation} ${nom} ${prenom}` : `${nom} ${prenom}`;
       
       doc.text('Le présent document atteste que :', { align: 'left' });
       doc.moveDown(1);
@@ -352,20 +356,21 @@ const generateAttestationPDF = async (adhesion) => {
       doc.text('TÉLÉPHONE', attTableLeft + attColWidth, attY);
       
       doc.fontSize(attValueSize).fillColor('#000000');
-      doc.text(user.email || '-', attTableLeft, attY + 12);
-      const tel = user.telephoneMobile || user.telephone || '-';
+      doc.text(infosPerso.email || user.email || '-', attTableLeft, attY + 12);
+      const tel = infosPerso.telephoneMobile || infosPerso.telephone || user.telephoneMobile || user.telephone || '-';
       doc.text(tel, attTableLeft + attColWidth, attY + 12);
       
       attY += attRowHeight;
       
       // Ligne 3 : Adresse
-      if (user.adresse?.rue) {
+      const adresseData = infosPerso.adresse || user.adresse;
+      if (adresseData?.rue) {
         doc.fontSize(attLabelSize).fillColor('#747474');
         doc.text('ADRESSE', attTableLeft, attY);
         
         doc.fontSize(attValueSize).fillColor('#000000');
-        const complement = user.adresse.complement ? ` ${user.adresse.complement}` : '';
-        const adresse = `${user.adresse.rue}${complement}, ${user.adresse.codePostal} ${user.adresse.ville}`;
+        const complement = adresseData.complement ? ` ${adresseData.complement}` : '';
+        const adresse = `${adresseData.rue}${complement}, ${adresseData.codePostal} ${adresseData.ville}`;
         doc.text(adresse, attTableLeft, attY + 12, { width: attColWidth * 2 });
         attY += attRowHeight;
       }
