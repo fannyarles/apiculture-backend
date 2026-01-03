@@ -120,13 +120,7 @@ const expireAdhesionsCron = () => {
     await expireAdhesionsAnneePrecedente();
   });
 
-  // Cron expression: '55 1 3 1 *' = à 01:55 le 3 janvier (backup/vérification)
-  cron.schedule('55 1 3 1 *', async () => {
-    console.log('📅 Cron: Vérification expiration des adhésions (3 janvier 01:55)...');
-    await expireAdhesionsAnneePrecedente();
-  });
-
-  console.log('📅 Cron job configuré: Expiration des adhésions (1er janvier 00:00 + 3 janvier 01:55)');
+  console.log('📅 Cron job configuré: Expiration des adhésions (1er janvier 00:00)');
 };
 
 /**
