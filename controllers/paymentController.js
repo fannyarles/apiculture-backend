@@ -4,7 +4,7 @@ const nodemailer = require('nodemailer');
 const Adhesion = require('../models/adhesionModel');
 const Service = require('../models/serviceModel');
 const Permission = require('../models/permissionModel');
-const { generateAndUploadAttestation } = require('../services/pdfService');
+const { generateAndUploadAttestation, generateAndUploadBulletinAdhesion } = require('../services/pdfService');
 const { notifyAdminsAdhesionPayment, notifyAdminsServicePayment } = require('../services/adminNotificationService');
 const { uploadFile, getSignedUrl } = require('../services/s3Service');
 
@@ -178,6 +178,17 @@ const markPaymentAsPaid = asyncHandler(async (req, res) => {
           await adhesionAMAIR.save();
         } catch (attestationError) {
           console.error('Erreur génération attestation AMAIR:', attestationError);
+        }
+        
+        // Générer le bulletin d'adhésion pour l'adhésion AMAIR gratuite
+        try {
+          const bulletinAMAIR = await generateAndUploadBulletinAdhesion(adhesionAMAIR);
+          adhesionAMAIR.bulletinKey = bulletinAMAIR.key;
+          adhesionAMAIR.bulletinUrl = bulletinAMAIR.url;
+          await adhesionAMAIR.save();
+          console.log('✅ Bulletin adhésion AMAIR gratuite généré');
+        } catch (bulletinError) {
+          console.error('Erreur génération bulletin AMAIR:', bulletinError);
         }
       } catch (error) {
         console.error('Erreur lors de la création de l\'adhésion AMAIR gratuite:', error);
@@ -662,6 +673,17 @@ const handleStripeWebhook = asyncHandler(async (req, res) => {
                 await adhesionAMAIR.save();
               } catch (attestationError) {
                 console.error('Erreur génération attestation AMAIR:', attestationError);
+              }
+              
+              // Générer le bulletin d'adhésion pour l'adhésion AMAIR gratuite
+              try {
+                const bulletinAMAIR = await generateAndUploadBulletinAdhesion(adhesionAMAIR);
+                adhesionAMAIR.bulletinKey = bulletinAMAIR.key;
+                adhesionAMAIR.bulletinUrl = bulletinAMAIR.url;
+                await adhesionAMAIR.save();
+                console.log('✅ Bulletin adhésion AMAIR gratuite généré');
+              } catch (bulletinError) {
+                console.error('Erreur génération bulletin AMAIR:', bulletinError);
               }
             } catch (error) {
               console.error('Erreur lors de la création de l\'adhésion AMAIR gratuite:', error);
