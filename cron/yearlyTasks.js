@@ -1,6 +1,7 @@
 const cron = require('node-cron');
 const Parametre = require('../models/parametreModel');
 const Adhesion = require('../models/adhesionModel');
+const Service = require('../models/serviceModel');
 const Article = require('../models/articleModel');
 const Communication = require('../models/communicationModel');
 const User = require('../models/userModel');
@@ -133,14 +134,67 @@ const expireAdhesionsAnneePrecedente = async () => {
 };
 
 /**
+ * Fonction pour expirer les services de l'année précédente
+ * - Services 'actif' → 'expire' (vrais souscripteurs de l'année passée)
+ * - Services en attente → 'abandonnee' (jamais aboutis)
+ */
+const expireServicesAnneePrecedente = async () => {
+  try {
+    const currentYear = new Date().getFullYear();
+    const previousYear = currentYear - 1;
+
+    console.log(`🔄 Traitement des services de l'année ${previousYear}...`);
+
+    // 1. Services actifs → expire (vrais souscripteurs qui ont payé)
+    const resultExpires = await Service.updateMany(
+      {
+        annee: previousYear,
+        status: 'actif'
+      },
+      {
+        $set: {
+          status: 'expire'
+        }
+      }
+    );
+
+    console.log(`✅ ${resultExpires.modifiedCount} service(s) actif(s) de ${previousYear} passé(s) en 'expiré'`);
+
+    // 2. Services non aboutis → abandonnee (jamais payés/validés)
+    const resultAbandonnees = await Service.updateMany(
+      {
+        annee: previousYear,
+        status: { $in: ['en_attente_paiement', 'en_attente_caution', 'en_attente_validation'] }
+      },
+      {
+        $set: {
+          status: 'abandonnee'
+        }
+      }
+    );
+
+    console.log(`✅ ${resultAbandonnees.modifiedCount} service(s) non abouti(s) de ${previousYear} passé(s) en 'abandonné'`);
+
+    return {
+      expires: resultExpires.modifiedCount,
+      abandonnees: resultAbandonnees.modifiedCount
+    };
+  } catch (error) {
+    console.error('❌ Erreur lors du traitement des services:', error);
+    throw error;
+  }
+};
+
+/**
  * Cron job qui s'exécute le 1er janvier à 00:00
- * Expire toutes les adhésions de l'année précédente
+ * Expire toutes les adhésions et services de l'année précédente
  */
 const expireAdhesionsCron = () => {
   // Cron expression: '0 0 1 1 *' = à 00:00 le 1er janvier
   cron.schedule('0 0 1 1 *', async () => {
-    console.log('📅 Cron: Expiration des adhésions (1er janvier minuit)...');
+    console.log('📅 Cron: Expiration des adhésions et services (1er janvier minuit)...');
     await expireAdhesionsAnneePrecedente();
+    await expireServicesAnneePrecedente();
   });
 
   console.log('📅 Cron job configuré: Expiration des adhésions (1er janvier 00:00)');
