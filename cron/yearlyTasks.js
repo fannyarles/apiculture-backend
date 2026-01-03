@@ -80,20 +80,21 @@ const initNouvelleAnneeCron = () => {
 
 /**
  * Fonction pour expirer les adhésions de l'année précédente
- * Passe toutes les adhésions actives de l'année N-1 en statut 'expiree'
+ * - Adhésions 'actif' → 'expiree' (vrais adhérents de l'année passée)
+ * - Adhésions 'en_attente' ou 'paiement_demande' → 'abandonnee' (jamais abouties)
  */
 const expireAdhesionsAnneePrecedente = async () => {
   try {
     const currentYear = new Date().getFullYear();
     const previousYear = currentYear - 1;
 
-    console.log(`🔄 Expiration des adhésions de l'année ${previousYear}...`);
+    console.log(`🔄 Traitement des adhésions de l'année ${previousYear}...`);
 
-    // Trouver et mettre à jour toutes les adhésions actives de l'année précédente
-    const result = await Adhesion.updateMany(
+    // 1. Adhésions actives → expiree (vrais adhérents qui ont payé)
+    const resultExpirees = await Adhesion.updateMany(
       {
         annee: previousYear,
-        status: { $in: ['actif', 'en_attente', 'paiement_demande'] }
+        status: 'actif'
       },
       {
         $set: {
@@ -103,10 +104,30 @@ const expireAdhesionsAnneePrecedente = async () => {
       }
     );
 
-    console.log(`✅ ${result.modifiedCount} adhésion(s) de ${previousYear} passée(s) en statut 'expirée'`);
-    return result.modifiedCount;
+    console.log(`✅ ${resultExpirees.modifiedCount} adhésion(s) active(s) de ${previousYear} passée(s) en 'expirée'`);
+
+    // 2. Adhésions non abouties → abandonnee (jamais payées/validées)
+    const resultAbandonnees = await Adhesion.updateMany(
+      {
+        annee: previousYear,
+        status: { $in: ['en_attente', 'paiement_demande'] }
+      },
+      {
+        $set: {
+          status: 'abandonnee',
+          dateExpiration: new Date()
+        }
+      }
+    );
+
+    console.log(`✅ ${resultAbandonnees.modifiedCount} adhésion(s) non aboutie(s) de ${previousYear} passée(s) en 'abandonnée'`);
+
+    return {
+      expirees: resultExpirees.modifiedCount,
+      abandonnees: resultAbandonnees.modifiedCount
+    };
   } catch (error) {
-    console.error('❌ Erreur lors de l\'expiration des adhésions:', error);
+    console.error('❌ Erreur lors du traitement des adhésions:', error);
     throw error;
   }
 };
