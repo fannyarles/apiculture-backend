@@ -1370,7 +1370,7 @@ const generateServiceAttestationPDF = async (service) => {
       
       doc.fontSize(svcValueSize).fillColor('#000000');
       doc.text(infos.email || user.email || '-', svcTableLeft, svcY + 12);
-      const svcTel = infos.telephone || user.telephoneMobile || user.telephone || '-';
+      const svcTel = infos.telephoneMobile || user.telephoneMobile || user.telephone || '-';
       doc.text(svcTel, svcTableLeft + svcColWidth, svcY + 12);
       
       svcY += svcRowHeight;
