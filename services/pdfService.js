@@ -1025,7 +1025,7 @@ const generateUNAFAttestationPDF = async (service) => {
       
       // Signature du président UNAF depuis S3 ou local
       try {
-        const signatureBuffer = await downloadFile('root/signatures/UNAF_signature_president.png');
+        const signatureBuffer = await downloadFile('/signatures/UNAF_signature_president.png');
         doc.image(signatureBuffer, 50, doc.y, { width: 150 });
       } catch (err) {
         console.warn('Signature UNAF non trouvée sur S3:', err.message);
@@ -1186,7 +1186,7 @@ const generateEcocontributionAttestationPDF = async (service) => {
       
       // Signature du président UNAF depuis S3 ou local
       try {
-        const signatureBuffer = await downloadFile('root/signatures/UNAF_signature_president.png');
+        const signatureBuffer = await downloadFile('/signatures/UNAF_signature_president.png');
         doc.image(signatureBuffer, 50, doc.y, { width: 150 });
       } catch (err) {
         console.warn('Signature UNAF non trouvée sur S3:', err.message);
