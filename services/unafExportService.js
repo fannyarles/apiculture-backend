@@ -1,8 +1,10 @@
-const ExcelJS = require('exceljs');
-const path = require('path');
 const Service = require('../models/serviceModel');
 const UNAFExport = require('../models/unafExportModel');
 const { uploadFile, getSignedUrl } = require('./s3Service');
+const { generateExcelFromTemplate, updateCells, batchUpdateCells } = require('./googleSheetsService');
+
+// ID du template Google Sheets (depuis .env)
+const GOOGLE_SHEETS_TEMPLATE_ID = process.env.GOOGLE_SHEETS_TEMPLATE_ID;
 
 // Dates d'export pour 2026
 const EXPORT_DATES_2026 = [
@@ -23,8 +25,6 @@ const EXPORT_DATES_2026 = [
   new Date('2026-09-14'),
 ];
 
-// Chemin vers le template Excel
-const TEMPLATE_PATH = path.join(__dirname, '../uploads/unaf/SAR_Listingstructure2026miseajour.xlsx');
 
 /**
  * Vérifie si une date est une date d'export
@@ -149,6 +149,11 @@ const getUnexportedPayments = async (annee) => {
  * @returns {Promise<Object>}
  */
 const generateUNAFExcel = async (annee, exportDate = new Date()) => {
+  // Vérifier que le template ID est configuré
+  if (!GOOGLE_SHEETS_TEMPLATE_ID) {
+    throw new Error('GOOGLE_SHEETS_TEMPLATE_ID n\'est pas configuré dans le .env');
+  }
+
   // Récupérer les paiements non exportés
   const payments = await getUnexportedPayments(annee);
 
@@ -156,143 +161,70 @@ const generateUNAFExcel = async (annee, exportDate = new Date()) => {
     return { success: false, message: 'Aucun nouveau paiement à exporter' };
   }
 
-  // Charger le template Excel
-  const workbook = new ExcelJS.Workbook();
-  
-  try {
-    await workbook.xlsx.readFile(TEMPLATE_PATH);
-  } catch (fileError) {
-    console.error('Erreur lecture template Excel:', fileError);
-    throw new Error(`Impossible de lire le template Excel: ${fileError.message}`);
-  }
-
-  // Forcer Excel à recalculer toutes les formules à l'ouverture du fichier
-  workbook.calcProperties = workbook.calcProperties || {};
-  workbook.calcProperties.fullCalcOnLoad = true;
-  
-  // Récupérer la première feuille (par index ou par nom)
-  let worksheet = workbook.getWorksheet(1);
-
-  if (!worksheet) {
-    // Essayer de récupérer par nom ou la première feuille disponible
-    worksheet = workbook.worksheets[0];
-  }
-  
-  if (!worksheet) {
-    throw new Error('Aucune feuille trouvée dans le template Excel');
-  }
-
-  // Remplir les informations générales
-  // Case AA5 : date du jour de l'export
-  worksheet.getCell('AA5').value = exportDate.toLocaleDateString('fr-FR');
-  
-  // Case AA6 : "Virement"
-  worksheet.getCell('AA6').value = 'Virement';
-  
-  // Case AA8 : 1 si premier export, sinon 0
-  const isFirst = isFirstExportOfYear(exportDate, annee);
-  worksheet.getCell('AA8').value = isFirst ? 1 : 0;
-
-  // Compteurs pour les quantités (AA15-AA24)
-  const counts = {
-    cotisationIndividuelle: 0,  // AA15 - colonne N
-    revuePapier: 0,             // AA16 - colonne O
-    revueNumerique: 0,          // AA17 - colonne P
-    revuePapierNumerique: 0,    // AA18 - colonne Q
-    formule1: 0,                // AA19 - colonne R
-    formule2: 0,                // AA20 - colonne S
-    formule3: 0,                // AA21 - colonne T
-    affairesJuridiques: 0,      // AA22 - colonne U
-  };
-
-  // Ajouter les données à partir de la ligne 3
-  let currentRow = 3;
+  // Variables pour tracker les éléments inclus
   const servicesInclus = [];
   const modificationsIncluses = [];
   let montantTotal = 0;
+  const isFirst = isFirstExportOfYear(exportDate, annee);
 
+  // Compteurs pour les quantités (AA15-AA24)
+  const counts = {
+    cotisationIndividuelle: 0,
+    revuePapier: 0,
+    revueNumerique: 0,
+    revuePapierNumerique: 0,
+    formule1: 0,
+    formule2: 0,
+    formule3: 0,
+    affairesJuridiques: 0,
+  };
+
+  // Préparer les données pour Google Sheets
+  const rowsData = [];
+  
   for (const payment of payments) {
-    const row = worksheet.getRow(currentRow);
     const info = payment.informations || {};
     const unafData = payment.unafData || {};
     const options = payment.options || {};
-
-    // A : Nom
-    row.getCell('A').value = info.nom || payment.user?.nom || '';
-    
-    // B : Prénom
-    row.getCell('B').value = info.prenom || payment.user?.prenom || '';
-    
-    // C - H : Adresse postale
     const adresse = info.adresse || {};
-    row.getCell('C').value = (adresse.rue || '').trim();
-    row.getCell('E').value = (adresse.complement || '').trim();
-    row.getCell('F').value = (adresse.codePostal || '').trim();
-    row.getCell('G').value = (adresse.ville || '').trim();
-    row.getCell('H').value = (adresse.pays || 'France').trim();
-    
-    // I : Email
-    row.getCell('I').value = info.email || payment.user?.email || '';
-    
-    // J - K : Téléphone
-    row.getCell('J').value = info.telephone || '';
-    row.getCell('K').value = info.telephoneMobile || '';
-    
-    // L : SIRET
-    row.getCell('L').value = unafData.siret || '';
-    
-    // M : Nb ruches
-    row.getCell('M').value = unafData.nombreRuches || '';
-    
-    // N : "1" si cotisation individuelle (toujours 1 pour UNAF)
-    row.getCell('N').value = 1;
-    counts.cotisationIndividuelle++;
-    
-    // O : "1" si revue papier
-    if (options.revue?.choix === 'papier') {
-      row.getCell('O').value = 1;
-      counts.revuePapier++;
-    }
-    
-    // P : "1" si revue numérique
-    if (options.revue?.choix === 'numerique') {
-      row.getCell('P').value = 1;
-      counts.revueNumerique++;
-    }
-    
-    // Q : "1" si revue papier & numérique
-    if (options.revue?.choix === 'papier_numerique') {
-      row.getCell('Q').value = 1;
-      counts.revuePapierNumerique++;
-    }
-    
-    // R : "1" si formule 1
-    if (options.assurance?.formule === 'formule1') {
-      row.getCell('R').value = 1;
-      counts.formule1++;
-    }
-    
-    // S : "1" si formule 2
-    if (options.assurance?.formule === 'formule2') {
-      row.getCell('S').value = 1;
-      counts.formule2++;
-    }
-    
-    // T : "1" si formule 3
-    if (options.assurance?.formule === 'formule3') {
-      row.getCell('T').value = 1;
-      counts.formule3++;
-    }
-    
-    // U : "1" si cotisation pour affaires juridiques
-    if (options.affairesJuridiques?.souscrit) {
-      row.getCell('U').value = 1;
-      counts.affairesJuridiques++;
-    }
 
-    row.commit();
-    currentRow++;
+    // Préparer la ligne de données (colonnes A à U)
+    const rowData = [
+      info.nom || payment.user?.nom || '',           // A: Nom
+      info.prenom || payment.user?.prenom || '',     // B: Prénom
+      (adresse.rue || '').trim(),                    // C: Rue
+      '',                                             // D: (vide ou autre)
+      (adresse.complement || '').trim(),             // E: Complément
+      (adresse.codePostal || '').trim(),             // F: Code postal
+      (adresse.ville || '').trim(),                  // G: Ville
+      (adresse.pays || 'France').trim(),             // H: Pays
+      info.email || payment.user?.email || '',       // I: Email
+      info.telephone || '',                          // J: Téléphone
+      info.telephoneMobile || '',                    // K: Téléphone mobile
+      unafData.siret || '',                          // L: SIRET
+      unafData.nombreRuches || '',                   // M: Nb ruches
+      1,                                              // N: Cotisation individuelle (toujours 1)
+      options.revue?.choix === 'papier' ? 1 : '',              // O: Revue papier
+      options.revue?.choix === 'numerique' ? 1 : '',           // P: Revue numérique
+      options.revue?.choix === 'papier_numerique' ? 1 : '',    // Q: Revue papier & numérique
+      options.assurance?.formule === 'formule1' ? 1 : '',      // R: Formule 1
+      options.assurance?.formule === 'formule2' ? 1 : '',      // S: Formule 2
+      options.assurance?.formule === 'formule3' ? 1 : '',      // T: Formule 3
+      options.affairesJuridiques?.souscrit ? 1 : '',           // U: Affaires juridiques
+    ];
+
+    rowsData.push(rowData);
     montantTotal += payment.montant || 0;
+
+    // Compter les options
+    counts.cotisationIndividuelle++;
+    if (options.revue?.choix === 'papier') counts.revuePapier++;
+    if (options.revue?.choix === 'numerique') counts.revueNumerique++;
+    if (options.revue?.choix === 'papier_numerique') counts.revuePapierNumerique++;
+    if (options.assurance?.formule === 'formule1') counts.formule1++;
+    if (options.assurance?.formule === 'formule2') counts.formule2++;
+    if (options.assurance?.formule === 'formule3') counts.formule3++;
+    if (options.affairesJuridiques?.souscrit) counts.affairesJuridiques++;
 
     // Tracker les éléments inclus
     if (payment.type === 'initial') {
@@ -305,18 +237,41 @@ const generateUNAFExcel = async (annee, exportDate = new Date()) => {
     }
   }
 
-  // Remplir les quantités dans AA15-AA24
-  worksheet.getCell('AA15').value = counts.cotisationIndividuelle;
-  worksheet.getCell('AA16').value = counts.revuePapier;
-  worksheet.getCell('AA17').value = counts.revueNumerique;
-  worksheet.getCell('AA18').value = counts.revuePapierNumerique;
-  worksheet.getCell('AA19').value = counts.formule1;
-  worksheet.getCell('AA20').value = counts.formule2;
-  worksheet.getCell('AA21').value = counts.formule3;
-  worksheet.getCell('AA22').value = counts.affairesJuridiques;
+  // Générer l'Excel via Google Sheets
+  const exportName = `UNAF_Export_${annee}_${exportDate.toISOString().split('T')[0]}`;
   
-  // Générer le buffer Excel
-  const buffer = await workbook.xlsx.writeBuffer();
+  const buffer = await generateExcelFromTemplate(
+    GOOGLE_SHEETS_TEMPLATE_ID,
+    exportName,
+    async (spreadsheetId, sheetName) => {
+      // 1. Remplir les informations générales (AA5, AA6, AA8)
+      const generalUpdates = [
+        { range: `${sheetName}!AA5`, value: exportDate.toLocaleDateString('fr-FR') },
+        { range: `${sheetName}!AA6`, value: 'Virement' },
+        { range: `${sheetName}!AA8`, value: isFirst ? 1 : 0 },
+      ];
+      await batchUpdateCells(spreadsheetId, generalUpdates);
+
+      // 2. Remplir les données des paiements (à partir de la ligne 3)
+      if (rowsData.length > 0) {
+        const dataRange = `${sheetName}!A3:U${3 + rowsData.length - 1}`;
+        await updateCells(spreadsheetId, dataRange, rowsData);
+      }
+
+      // 3. Remplir les quantités dans AA15-AA22
+      const countsUpdates = [
+        { range: `${sheetName}!AA15`, value: counts.cotisationIndividuelle },
+        { range: `${sheetName}!AA16`, value: counts.revuePapier },
+        { range: `${sheetName}!AA17`, value: counts.revueNumerique },
+        { range: `${sheetName}!AA18`, value: counts.revuePapierNumerique },
+        { range: `${sheetName}!AA19`, value: counts.formule1 },
+        { range: `${sheetName}!AA20`, value: counts.formule2 },
+        { range: `${sheetName}!AA21`, value: counts.formule3 },
+        { range: `${sheetName}!AA22`, value: counts.affairesJuridiques },
+      ];
+      await batchUpdateCells(spreadsheetId, countsUpdates);
+    }
+  );
 
   // Upload vers S3
   const fileName = `UNAF_Export_${annee}_${exportDate.toISOString().split('T')[0]}.xlsx`;

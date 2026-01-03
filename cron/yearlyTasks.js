@@ -1,5 +1,6 @@
 const cron = require('node-cron');
 const Parametre = require('../models/parametreModel');
+const Adhesion = require('../models/adhesionModel');
 const Article = require('../models/articleModel');
 const Communication = require('../models/communicationModel');
 const { getDestinataires } = require('../controllers/communicationController');
@@ -23,6 +24,13 @@ const initNouvelleAnneeCron = () => {
       const currentSAR = await Parametre.findOne({ organisme: 'SAR', annee: currentYear });
       const currentAMAIR = await Parametre.findOne({ organisme: 'AMAIR', annee: currentYear });
 
+      // Fermer les adhésions de l'année qui se termine
+      await Parametre.updateMany(
+        { annee: currentYear },
+        { adhesionsOuvertes: false }
+      );
+      console.log(`🔒 Adhésions fermées pour l'année ${currentYear}`);
+
       // Vérifier si les paramètres existent déjà
       const existingSAR = await Parametre.findOne({ organisme: 'SAR', annee: nextYear });
       const existingAMAIR = await Parametre.findOne({ organisme: 'AMAIR', annee: nextYear });
@@ -34,7 +42,7 @@ const initNouvelleAnneeCron = () => {
         const sarParametre = await Parametre.create({
           organisme: 'SAR',
           annee: nextYear,
-          tarifs: currentSAR ? currentSAR.tarifs : { loisir: 30, professionnel: 50 },
+          tarifs: currentSAR ? currentSAR.tarifs.SAR : null,
           adhesionsOuvertes: false, // Fermées par défaut
           estAnneeEnCours: false
         });
@@ -47,7 +55,7 @@ const initNouvelleAnneeCron = () => {
         const amairParametre = await Parametre.create({
           organisme: 'AMAIR',
           annee: nextYear,
-          tarifs: currentAMAIR ? currentAMAIR.tarifs : { loisir: 25, professionnel: 45 },
+          tarifs: currentAMAIR ? currentAMAIR.tarifs.SAR : null,
           adhesionsOuvertes: false, // Fermées par défaut
           estAnneeEnCours: false
         });
@@ -66,6 +74,59 @@ const initNouvelleAnneeCron = () => {
   });
 
   console.log('📅 Cron job configuré: Initialisation nouvelle année (31 décembre à 23:59)');
+};
+
+/**
+ * Fonction pour expirer les adhésions de l'année précédente
+ * Passe toutes les adhésions actives de l'année N-1 en statut 'expiree'
+ */
+const expireAdhesionsAnneePrecedente = async () => {
+  try {
+    const currentYear = new Date().getFullYear();
+    const previousYear = currentYear - 1;
+
+    console.log(`🔄 Expiration des adhésions de l'année ${previousYear}...`);
+
+    // Trouver et mettre à jour toutes les adhésions actives de l'année précédente
+    const result = await Adhesion.updateMany(
+      {
+        annee: previousYear,
+        status: { $in: ['actif', 'en_attente', 'paiement_demande'] }
+      },
+      {
+        $set: {
+          status: 'expiree',
+          dateExpiration: new Date()
+        }
+      }
+    );
+
+    console.log(`✅ ${result.modifiedCount} adhésion(s) de ${previousYear} passée(s) en statut 'expirée'`);
+    return result.modifiedCount;
+  } catch (error) {
+    console.error('❌ Erreur lors de l\'expiration des adhésions:', error);
+    throw error;
+  }
+};
+
+/**
+ * Cron job qui s'exécute le 1er janvier à 00:00
+ * Expire toutes les adhésions de l'année précédente
+ */
+const expireAdhesionsCron = () => {
+  // Cron expression: '0 0 1 1 *' = à 00:00 le 1er janvier
+  cron.schedule('0 0 1 1 *', async () => {
+    console.log('📅 Cron: Expiration des adhésions (1er janvier minuit)...');
+    await expireAdhesionsAnneePrecedente();
+  });
+
+  // Cron expression: '55 1 3 1 *' = à 01:55 le 3 janvier (backup/vérification)
+  cron.schedule('55 1 3 1 *', async () => {
+    console.log('📅 Cron: Vérification expiration des adhésions (3 janvier 01:55)...');
+    await expireAdhesionsAnneePrecedente();
+  });
+
+  console.log('📅 Cron job configuré: Expiration des adhésions (1er janvier 00:00 + 3 janvier 01:55)');
 };
 
 /**
@@ -258,6 +319,7 @@ const generateUNAFExportCron = () => {
  */
 const initCronJobs = () => {
   initNouvelleAnneeCron();
+  expireAdhesionsCron();
   updateAnneeEnCoursCron();
   publishScheduledArticlesCron();
   sendScheduledCommunicationsCron();
