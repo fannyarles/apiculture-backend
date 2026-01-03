@@ -54,4 +54,14 @@ const admin = (req, res, next) => {
   }
 };
 
-module.exports = { protect, admin };
+// Vérifier si l'utilisateur est super_admin
+const superAdmin = (req, res, next) => {
+  if (req.user && req.user.hasRole('super_admin')) {
+    next();
+  } else {
+    res.status(403);
+    throw new Error('Accès refusé - Super Admin uniquement');
+  }
+};
+
+module.exports = { protect, admin, superAdmin };

@@ -3,9 +3,11 @@ const Parametre = require('../models/parametreModel');
 const Adhesion = require('../models/adhesionModel');
 const Article = require('../models/articleModel');
 const Communication = require('../models/communicationModel');
+const User = require('../models/userModel');
 const { getDestinataires } = require('../controllers/communicationController');
 const { envoyerCommunication } = require('../services/emailService');
 const { generateUNAFExcel, isExportDate, EXPORT_DATES_2026 } = require('../services/unafExportService');
+const nodemailer = require('nodemailer');
 
 /**
  * Cron job qui s'exécute le 31 décembre à 23:59
@@ -309,6 +311,134 @@ const generateUNAFExportCron = () => {
 };
 
 /**
+ * Configuration du transporteur email pour les rappels d'activation
+ */
+const getTransporter = () => {
+  return nodemailer.createTransport({
+    host: process.env.SMTP_HOST,
+    port: process.env.SMTP_PORT,
+    secure: process.env.SMTP_SECURE === 'true',
+    auth: {
+      user: process.env.SMTP_USER,
+      pass: process.env.SMTP_PASS,
+    },
+  });
+};
+
+/**
+ * Envoyer l'email de rappel d'activation
+ */
+const sendActivationReminderEmail = async (user) => {
+  const transporter = getTransporter();
+  const loginUrl = `${process.env.FRONTEND_URL}/login`;
+  
+  const mailOptions = {
+    from: `"Abeille Réunion" <${process.env.SMTP_FROM || process.env.SMTP_USER}>`,
+    to: user.email,
+    subject: '⚠️ Rappel : Activez votre compte Abeille Réunion',
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <div style="background-color: #ef4444; padding: 20px; text-align: center;">
+          <h1 style="color: white; margin: 0;">⚠️ Rappel Important</h1>
+        </div>
+        <div style="padding: 30px; background-color: #f9fafb;">
+          <h2 style="color: #1e293b;">Bonjour ${user.prenom} ${user.nom},</h2>
+          <p style="color: #475569;">Votre compte sur <strong>Abeille Réunion</strong> n'a pas encore été activé.</p>
+          <div style="background-color: #fee2e2; border: 2px solid #ef4444; border-radius: 8px; padding: 20px; margin: 20px 0; text-align: center;">
+            <p style="margin: 0; color: #991b1b; font-size: 18px; font-weight: bold;">🗓️ Votre compte sera supprimé dans 7 jours</p>
+            <p style="margin: 10px 0 0 0; color: #991b1b;">Ainsi que tout votre historique d'adhésions.</p>
+          </div>
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="${loginUrl}" style="background-color: #ef4444; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">Activer mon compte maintenant</a>
+          </div>
+        </div>
+        <div style="background-color: #1e293b; padding: 20px; text-align: center;">
+          <p style="color: #94a3b8; margin: 0; font-size: 12px;">© ${new Date().getFullYear()} Abeille Réunion. Tous droits réservés.</p>
+        </div>
+      </div>
+    `,
+  };
+  
+  await transporter.sendMail(mailOptions);
+};
+
+/**
+ * Cron job qui s'exécute tous les jours à 9h00
+ * Envoie des rappels aux utilisateurs dont le compte expire dans 7 jours
+ * et supprime les comptes expirés (plus de 2 mois sans activation)
+ */
+const userActivationCron = () => {
+  // Cron expression: '0 9 * * *' = à 9h00 tous les jours
+  cron.schedule('0 9 * * *', async () => {
+    try {
+      console.log('🔍 Cron: Vérification des comptes en attente d\'activation...');
+      
+      const now = new Date();
+      const twoMonthsAgo = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000); // 60 jours
+      const reminderThreshold = new Date(now.getTime() - 53 * 24 * 60 * 60 * 1000); // 53 jours (7 jours avant expiration)
+      
+      // 1. Envoyer les rappels (utilisateurs créés il y a ~53 jours, pas encore de rappel)
+      const usersNeedingReminder = await User.find({
+        activatedAt: null,
+        createdFromAdhesion: { $ne: null },
+        activationReminderSentAt: null,
+        createdAt: { $lte: reminderThreshold, $gt: twoMonthsAgo },
+      });
+      
+      let remindersSent = 0;
+      for (const user of usersNeedingReminder) {
+        try {
+          await sendActivationReminderEmail(user);
+          await User.findByIdAndUpdate(user._id, { activationReminderSentAt: new Date() });
+          remindersSent++;
+          console.log(`   📧 Rappel envoyé à ${user.email}`);
+        } catch (error) {
+          console.error(`   ❌ Erreur envoi rappel à ${user.email}:`, error.message);
+        }
+      }
+      
+      if (remindersSent > 0) {
+        console.log(`✅ ${remindersSent} rappel(s) d'activation envoyé(s)`);
+      }
+      
+      // 2. Supprimer les comptes expirés (créés il y a plus de 60 jours, non activés)
+      const expiredUsers = await User.find({
+        activatedAt: null,
+        createdFromAdhesion: { $ne: null },
+        createdAt: { $lte: twoMonthsAgo },
+      });
+      
+      let deletedCount = 0;
+      for (const user of expiredUsers) {
+        try {
+          // Supprimer les adhésions associées
+          await Adhesion.deleteMany({ user: user._id });
+          // Supprimer l'utilisateur
+          await User.findByIdAndDelete(user._id);
+          deletedCount++;
+          console.log(`   🗑️ Compte supprimé: ${user.email}`);
+        } catch (error) {
+          console.error(`   ❌ Erreur suppression ${user.email}:`, error.message);
+        }
+      }
+      
+      if (deletedCount > 0) {
+        console.log(`🗑️ ${deletedCount} compte(s) expiré(s) supprimé(s)`);
+      }
+      
+      if (remindersSent === 0 && deletedCount === 0) {
+        console.log('ℹ️ Aucune action nécessaire pour les comptes en attente');
+      }
+      
+    } catch (error) {
+      console.error('❌ Erreur lors du traitement des comptes en attente:', error);
+    }
+  });
+
+  console.log('📅 Cron job configuré: Rappels et nettoyage des comptes (tous les jours à 9h00)');
+};
+
+/**
  * Initialiser tous les cron jobs
  */
 const initCronJobs = () => {
@@ -318,6 +448,7 @@ const initCronJobs = () => {
   publishScheduledArticlesCron();
   sendScheduledCommunicationsCron();
   generateUNAFExportCron();
+  userActivationCron();
   console.log('✅ Tous les cron jobs sont configurés');
 };
 

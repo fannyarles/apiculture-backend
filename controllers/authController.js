@@ -122,6 +122,9 @@ const loginUser = asyncHandler(async (req, res) => {
       organismes: user.organismes,
       permissions: permissions,
       token: generateToken(user._id),
+      // Flags pour première connexion (comptes créés via migration)
+      mustChangePassword: user.mustChangePassword || false,
+      mustAcceptTerms: user.mustAcceptTerms || false,
     });
   } else {
     res.status(401);
@@ -480,6 +483,76 @@ const contactAdmin = asyncHandler(async (req, res) => {
   }
 });
 
+// @desc    Compléter la première connexion (changement mdp + acceptation CGV)
+// @route   POST /api/auth/complete-first-login
+// @access  Private
+const completeFirstLogin = asyncHandler(async (req, res) => {
+  const { newPassword, acceptTerms } = req.body;
+  
+  const user = await User.findById(req.user._id);
+  
+  if (!user) {
+    res.status(404);
+    throw new Error('Utilisateur non trouvé');
+  }
+  
+  // Vérifier que le nouveau mot de passe est fourni si nécessaire
+  if (user.mustChangePassword && !newPassword) {
+    res.status(400);
+    throw new Error('Le nouveau mot de passe est requis');
+  }
+  
+  // Vérifier que les CGV sont acceptées si nécessaire
+  if (user.mustAcceptTerms && !acceptTerms) {
+    res.status(400);
+    throw new Error('Vous devez accepter les conditions générales');
+  }
+  
+  // Mettre à jour le mot de passe si nécessaire
+  if (user.mustChangePassword && newPassword) {
+    if (newPassword.length < 6) {
+      res.status(400);
+      throw new Error('Le mot de passe doit contenir au moins 6 caractères');
+    }
+    user.password = newPassword;
+    user.mustChangePassword = false;
+  }
+  
+  // Marquer les CGV comme acceptées
+  if (user.mustAcceptTerms && acceptTerms) {
+    user.mustAcceptTerms = false;
+    user.termsAcceptedAt = new Date();
+  }
+  
+  // Marquer le compte comme activé
+  if (!user.activatedAt) {
+    user.activatedAt = new Date();
+  }
+  
+  await user.save();
+  
+  // Charger les permissions
+  let permissions = null;
+  if (user.role === 'admin' || user.role === 'super_admin') {
+    permissions = await Permission.findOne({ userId: user._id });
+  }
+  
+  res.json({
+    _id: user._id,
+    prenom: user.prenom,
+    nom: user.nom,
+    email: user.email,
+    role: user.role,
+    roles: user.roles,
+    organisme: user.organisme,
+    organismes: user.organismes,
+    permissions: permissions,
+    mustChangePassword: false,
+    mustAcceptTerms: false,
+    message: 'Compte activé avec succès',
+  });
+});
+
 module.exports = {
   registerUser,
   loginUser,
@@ -492,4 +565,5 @@ module.exports = {
   forgotPassword,
   resetPassword,
   contactAdmin,
+  completeFirstLogin,
 };

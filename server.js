@@ -78,6 +78,8 @@ app.use('/stripe-account', require('./routes/stripeAccountRoutes'));
 console.log('✅ /stripe-account');
 app.use('/dev', require('./routes/devRoutes'));
 console.log('✅ /dev');
+app.use('/user-migration', require('./routes/userMigrationRoutes'));
+console.log('✅ /user-migration');
 
 // Servir les fichiers statiques pour les uploads
 app.use('/uploads', express.static('uploads'));

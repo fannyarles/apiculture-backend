@@ -144,6 +144,36 @@ const userSchema = mongoose.Schema(
       type: Date,
       required: false,
     },
+    // Champs pour l'activation des comptes créés à partir d'adhésions
+    activatedAt: {
+      type: Date,
+      default: null, // null = compte pas encore activé
+    },
+    mustChangePassword: {
+      type: Boolean,
+      default: false, // true pour les comptes créés via migration
+    },
+    mustAcceptTerms: {
+      type: Boolean,
+      default: false, // true pour les comptes créés via migration
+    },
+    termsAcceptedAt: {
+      type: Date,
+      default: null,
+    },
+    createdFromAdhesion: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Adhesion',
+      default: null,
+    },
+    activationEmailSentAt: {
+      type: Date,
+      default: null,
+    },
+    activationReminderSentAt: {
+      type: Date,
+      default: null,
+    },
   },
   {
     timestamps: true,

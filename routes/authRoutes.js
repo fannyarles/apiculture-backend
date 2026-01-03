@@ -12,6 +12,7 @@ const {
   forgotPassword,
   resetPassword,
   contactAdmin,
+  completeFirstLogin,
 } = require('../controllers/authController');
 const { protect, admin } = require('../middleware/authMiddleware');
 
@@ -28,6 +29,7 @@ router.get('/me', protect, getUserProfile); // Alias pour compatibilité fronten
 router.put('/profile', protect, updateUserProfile);
 router.put('/password', protect, changePassword);
 router.post('/contact-admin', protect, contactAdmin);
+router.post('/complete-first-login', protect, completeFirstLogin);
 
 // Routes admin
 router.get('/users', protect, admin, getUsers);
