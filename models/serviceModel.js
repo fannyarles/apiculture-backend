@@ -119,6 +119,17 @@ const serviceSchema = mongoose.Schema(
     ecocontributionAttestationUrl: {
       type: String,
     },
+    // Document de preuve de paiement (uploadé par l'admin)
+    documentPaiement: {
+      nom: String,
+      key: String,
+      url: String,
+      dateUpload: Date,
+      uploadePar: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User'
+      }
+    },
     // Informations personnelles (snapshot au moment de la souscription)
     informationsPersonnelles: {
       nom: String,

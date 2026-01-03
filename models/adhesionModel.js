@@ -164,6 +164,17 @@ const adhesionSchema = mongoose.Schema(
       type: mongoose.Schema.Types.Mixed,
       default: []
     },
+    // Document de preuve de paiement (uploadé par l'admin)
+    documentPaiement: {
+      nom: String,
+      key: String,
+      url: String,
+      dateUpload: Date,
+      uploadePar: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User'
+      }
+    },
   },
   {
     timestamps: true,

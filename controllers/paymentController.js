@@ -6,6 +6,7 @@ const Service = require('../models/serviceModel');
 const Permission = require('../models/permissionModel');
 const { generateAndUploadAttestation } = require('../services/pdfService');
 const { notifyAdminsAdhesionPayment, notifyAdminsServicePayment } = require('../services/adminNotificationService');
+const { uploadFile, getSignedUrl } = require('../services/s3Service');
 
 // Configuration du transporteur SMTP
 const transporter = nodemailer.createTransport({
@@ -65,6 +66,31 @@ const markPaymentAsPaid = asyncHandler(async (req, res) => {
   adhesion.paiement.note = note !== undefined ? note : adhesion.paiement.note;
   adhesion.status = 'actif';
   adhesion.dateValidation = new Date();
+
+  // Gérer l'upload du document de paiement si fourni
+  if (req.file) {
+    try {
+      const fileName = `preuve_paiement_${adhesion._id}_${Date.now()}${require('path').extname(req.file.originalname)}`;
+      const s3Result = await uploadFile(
+        req.file.buffer,
+        fileName,
+        req.file.mimetype,
+        `adhesions/${adhesion._id}/documents-paiement`
+      );
+
+      adhesion.documentPaiement = {
+        nom: req.file.originalname,
+        key: s3Result.key,
+        url: s3Result.url,
+        dateUpload: new Date(),
+        uploadePar: req.user._id
+      };
+      console.log(`📎 Document de paiement uploadé pour l'adhésion ${adhesion._id}`);
+    } catch (uploadError) {
+      console.error('Erreur upload document paiement:', uploadError);
+      // Ne pas bloquer le processus si l'upload échoue
+    }
+  }
   
   await adhesion.save();
 
@@ -1080,6 +1106,31 @@ const markServicePaymentAsPaid = asyncHandler(async (req, res) => {
   service.paiement.typePaiement = typePaiement;
   service.paiement.datePaiement = new Date(datePaiement);
   if (note) service.paiement.note = note;
+
+  // Gérer l'upload du document de paiement si fourni
+  if (req.file) {
+    try {
+      const fileName = `preuve_paiement_service_${service._id}_${Date.now()}${require('path').extname(req.file.originalname)}`;
+      const s3Result = await uploadFile(
+        req.file.buffer,
+        fileName,
+        req.file.mimetype,
+        `services/${service._id}/documents-paiement`
+      );
+
+      service.documentPaiement = {
+        nom: req.file.originalname,
+        key: s3Result.key,
+        url: s3Result.url,
+        dateUpload: new Date(),
+        uploadePar: req.user._id
+      };
+      console.log(`📎 Document de paiement uploadé pour le service ${service._id}`);
+    } catch (uploadError) {
+      console.error('Erreur upload document paiement service:', uploadError);
+      // Ne pas bloquer le processus si l'upload échoue
+    }
+  }
 
   // Mettre à jour le statut global
   // Pour les services sans caution (ex: assurance_unaf), activer directement
