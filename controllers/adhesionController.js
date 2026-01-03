@@ -195,14 +195,43 @@ const createAdhesion = asyncHandler(async (req, res) => {
           
           // Définir le chemin S3
           const folder = `documents-adhesions/${annee}/${organisme}`;
-          const fileName = `${doc.type}-${req.user._id}-${Date.now()}`;
+          
+          // Extraire l'extension du fichier original ou du mimeType
+          const path = require('path');
+          let fileExtension = '';
+          if (doc.nomOriginal) {
+            fileExtension = path.extname(doc.nomOriginal).toLowerCase();
+          } else if (doc.mimeType) {
+            // Fallback sur le mimeType
+            const mimeToExt = {
+              'application/pdf': '.pdf',
+              'image/jpeg': '.jpg',
+              'image/png': '.png',
+              'image/gif': '.gif',
+              'application/msword': '.doc',
+              'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '.docx'
+            };
+            fileExtension = mimeToExt[doc.mimeType] || '';
+          }
+          
+          // Construire le nom de fichier selon le type
+          let fileName;
+          const userNom = (req.user.nom || '').replace(/[^a-zA-Z0-9]/g, '');
+          const userPrenom = (req.user.prenom || '').replace(/[^a-zA-Z0-9]/g, '');
+          const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+          
+          if (doc.type === 'declaration_ruches') {
+            fileName = `declarationRuches_${userNom}${userPrenom}_${dateStr}${fileExtension}`;
+          } else {
+            fileName = `${doc.type}_${userNom}${userPrenom}_${dateStr}${fileExtension}`;
+          }
           
           // Upload vers S3
           const uploadResult = await uploadFile(buffer, fileName, folder, doc.mimeType);
           
           uploadedDocuments.push({
             nom: doc.nom,
-            nomOriginal: doc.nomOriginal,
+            nomOriginal: fileName, // Utiliser le nouveau nom formaté avec extension
             type: doc.type,
             organisme: doc.organisme,
             mimeType: doc.mimeType,
