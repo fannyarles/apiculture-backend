@@ -88,7 +88,7 @@ const serviceSchema = mongoose.Schema(
     // Statut global du service
     status: {
       type: String,
-      enum: ['en_attente_paiement', 'en_attente_caution', 'en_attente_validation', 'actif', 'expire'],
+      enum: ['en_attente_paiement', 'en_attente_caution', 'en_attente_validation', 'actif', 'expire', 'abandonnee'],
       default: 'en_attente_paiement',
     },
     // Signature électronique
