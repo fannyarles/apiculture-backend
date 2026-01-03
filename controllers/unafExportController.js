@@ -7,8 +7,10 @@ const {
   EXPORT_DATES_2026,
 } = require('../services/unafExportService');
 const UNAFExport = require('../models/unafExportModel');
+const Service = require('../models/serviceModel');
 const { getSignedUrl, downloadFile } = require('../services/s3Service');
 const { envoyerEmailAvecPieceJointe } = require('../services/emailService');
+const { generateAndUploadServiceAttestation, generateAndUploadEcocontributionAttestation } = require('../services/pdfService');
 
 // Adresse email UNAF pour les envois
 const UNAF_EMAIL = 'fannyarles.design+unaf@gmail.com';
@@ -244,6 +246,96 @@ const sendExport = asyncHandler(async (req, res) => {
   });
 });
 
+// @desc    Activer les adhésions d'un export UNAF
+// @route   PUT /api/unaf-export/:id/activate
+// @access  Private/SuperAdmin
+const activateExport = asyncHandler(async (req, res) => {
+  // Vérification super_admin
+  if (req.user.role !== 'super_admin') {
+    res.status(403);
+    throw new Error('Accès réservé au super administrateur');
+  }
+
+  const { id } = req.params;
+
+  const exportRecord = await UNAFExport.findById(id);
+
+  if (!exportRecord) {
+    res.status(404);
+    throw new Error('Export non trouvé');
+  }
+
+  let activatedCount = 0;
+  let errors = [];
+
+  // Activer les services inclus (paiements initiaux)
+  for (const serviceId of exportRecord.servicesInclus) {
+    try {
+      const service = await Service.findById(serviceId).populate('user', 'prenom nom email');
+      
+      if (service && service.status === 'en_attente_validation') {
+        service.status = 'actif';
+        service.dateValidation = new Date();
+        
+        // Générer l'attestation
+        try {
+          const attestationResult = await generateAndUploadServiceAttestation(service);
+          service.attestationKey = attestationResult.key;
+          service.attestationUrl = attestationResult.url;
+          
+          // Si écocontribution souscrite, générer aussi cette attestation
+          if (service.unafData?.options?.ecocontribution?.souscrit) {
+            const ecoResult = await generateAndUploadEcocontributionAttestation(service);
+            service.ecocontributionAttestationKey = ecoResult.key;
+            service.ecocontributionAttestationUrl = ecoResult.url;
+          }
+        } catch (attestationError) {
+          console.error(`Erreur génération attestation service ${serviceId}:`, attestationError);
+        }
+        
+        await service.save();
+        activatedCount++;
+        console.log(`✅ Service ${serviceId} activé`);
+      }
+    } catch (error) {
+      console.error(`Erreur activation service ${serviceId}:`, error);
+      errors.push({ serviceId, error: error.message });
+    }
+  }
+
+  // Marquer les modifications comme exportées/traitées
+  for (const modif of exportRecord.modificationsIncluses) {
+    try {
+      const service = await Service.findById(modif.serviceId);
+      
+      if (service && service.historiqueModifications[modif.modificationIndex]) {
+        // Les modifications n'ont pas de status séparé, mais on peut
+        // vérifier que le service parent est actif
+        if (service.status === 'en_attente_validation') {
+          service.status = 'actif';
+          service.dateValidation = new Date();
+          await service.save();
+          activatedCount++;
+        }
+      }
+    } catch (error) {
+      console.error(`Erreur traitement modification:`, error);
+      errors.push({ modificationIndex: modif.modificationIndex, error: error.message });
+    }
+  }
+
+  // Mettre à jour l'export avec la date d'activation
+  exportRecord.dateActivation = new Date();
+  exportRecord.notes = (exportRecord.notes || '') + `\nAdhésions activées le ${new Date().toLocaleDateString('fr-FR')} (${activatedCount} services)`;
+  await exportRecord.save();
+
+  res.json({
+    message: `${activatedCount} adhésion(s) activée(s) avec succès`,
+    activatedCount,
+    errors: errors.length > 0 ? errors : undefined,
+  });
+});
+
 module.exports = {
   getStats,
   getExportList,
@@ -253,4 +345,5 @@ module.exports = {
   getExportDates,
   deleteExport,
   sendExport,
+  activateExport,
 };

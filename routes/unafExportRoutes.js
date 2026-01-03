@@ -9,6 +9,7 @@ const {
   getExportDates,
   deleteExport,
   sendExport,
+  activateExport,
 } = require('../controllers/unafExportController');
 const { protect, admin } = require('../middleware/authMiddleware');
 
@@ -23,5 +24,6 @@ router.get('/download/:id', protect, admin, downloadExport);
 router.post('/generate', protect, admin, generateExport);
 router.delete('/:id', protect, admin, deleteExport);
 router.put('/:id/send', protect, admin, sendExport);
+router.put('/:id/activate', protect, admin, activateExport);
 
 module.exports = router;

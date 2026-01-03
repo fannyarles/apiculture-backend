@@ -1,21 +1,46 @@
 const { google } = require('googleapis');
 
-// Configuration de l'authentification Google
+// Configuration de l'authentification Google (OAuth2 ou Service Account)
 const getAuth = () => {
+  // Priorité 1: OAuth2 (compte personnel)
+  if (process.env.GOOGLE_OAUTH_CLIENT_ID && 
+      process.env.GOOGLE_OAUTH_CLIENT_SECRET && 
+      process.env.GOOGLE_OAUTH_REFRESH_TOKEN) {
+    
+    console.log('🔐 Utilisation de l\'authentification OAuth2');
+    
+    const oauth2Client = new google.auth.OAuth2(
+      process.env.GOOGLE_OAUTH_CLIENT_ID,
+      process.env.GOOGLE_OAUTH_CLIENT_SECRET
+    );
+    
+    oauth2Client.setCredentials({
+      refresh_token: process.env.GOOGLE_OAUTH_REFRESH_TOKEN,
+    });
+    
+    return oauth2Client;
+  }
+  
+  console.log('🔐 OAuth2 non configuré, vérification Service Account...');
+  console.log('  - GOOGLE_OAUTH_CLIENT_ID:', !!process.env.GOOGLE_OAUTH_CLIENT_ID);
+  console.log('  - GOOGLE_OAUTH_CLIENT_SECRET:', !!process.env.GOOGLE_OAUTH_CLIENT_SECRET);
+  console.log('  - GOOGLE_OAUTH_REFRESH_TOKEN:', !!process.env.GOOGLE_OAUTH_REFRESH_TOKEN);
+  
+  // Priorité 2: Service Account (nécessite Google Workspace pour le quota)
   const privateKey = process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n');
   
-  if (!process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL || !privateKey) {
-    throw new Error('Les credentials Google ne sont pas configurés. Vérifiez GOOGLE_SERVICE_ACCOUNT_EMAIL et GOOGLE_PRIVATE_KEY dans le .env');
+  if (process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL && privateKey) {
+    return new google.auth.JWT({
+      email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
+      key: privateKey,
+      scopes: [
+        'https://www.googleapis.com/auth/spreadsheets',
+        'https://www.googleapis.com/auth/drive',
+      ],
+    });
   }
 
-  return new google.auth.JWT({
-    email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
-    key: privateKey,
-    scopes: [
-      'https://www.googleapis.com/auth/spreadsheets',
-      'https://www.googleapis.com/auth/drive',
-    ],
-  });
+  throw new Error('Les credentials Google ne sont pas configurés. Configurez OAuth2 (GOOGLE_OAUTH_*) ou Service Account (GOOGLE_SERVICE_ACCOUNT_*) dans le .env');
 };
 
 /**
@@ -28,11 +53,18 @@ const copySpreadsheet = async (templateId, newName) => {
   const auth = getAuth();
   const drive = google.drive({ version: 'v3', auth });
 
+  // Utiliser un Shared Drive pour éviter l'erreur de quota des Service Accounts
+  const parentFolderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
+  
+  const requestBody = { name: newName };
+  if (parentFolderId) {
+    requestBody.parents = [parentFolderId];
+  }
+
   const response = await drive.files.copy({
     fileId: templateId,
-    requestBody: {
-      name: newName,
-    },
+    requestBody,
+    supportsAllDrives: true,
   });
 
   return response.data.id;
@@ -120,6 +152,7 @@ const deleteSpreadsheet = async (spreadsheetId) => {
 
   await drive.files.delete({
     fileId: spreadsheetId,
+    supportsAllDrives: true,
   });
 };
 

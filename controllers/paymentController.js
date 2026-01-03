@@ -347,10 +347,10 @@ const handleStripeWebhook = asyncHandler(async (req, res) => {
           service.paiement.stripePaymentIntentId = session.payment_intent;
           
           // Mettre à jour le statut global
-          // Pour les services sans caution (ex: assurance_unaf), activer directement
+          // Pour UNAF: attendre validation admin après export
+          // Pour miellerie: activer si caution reçue, sinon attendre caution
           if (service.typeService === 'assurance_unaf') {
-            service.status = 'actif';
-            service.dateValidation = new Date();
+            service.status = 'en_attente_validation';
           } else if (service.caution?.status === 'recu') {
             service.status = 'actif';
             service.dateValidation = new Date();
@@ -1133,10 +1133,10 @@ const markServicePaymentAsPaid = asyncHandler(async (req, res) => {
   }
 
   // Mettre à jour le statut global
-  // Pour les services sans caution (ex: assurance_unaf), activer directement
+  // Pour UNAF: attendre validation admin après export
+  // Pour miellerie: activer si caution reçue, sinon attendre caution
   if (service.typeService === 'assurance_unaf') {
-    service.status = 'actif';
-    service.dateValidation = new Date();
+    service.status = 'en_attente_validation';
   } else if (service.caution?.status === 'recu') {
     service.status = 'actif';
     service.dateValidation = new Date();

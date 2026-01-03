@@ -72,6 +72,8 @@ app.use('/users-management', require('./routes/userRoutes'));
 console.log('✅ /users-management');
 app.use('/unaf-export', require('./routes/unafExportRoutes'));
 console.log('✅ /unaf-export');
+app.use('/service-settings', require('./routes/serviceSettingsRoutes'));
+console.log('✅ /service-settings');
 app.use('/stripe-account', require('./routes/stripeAccountRoutes'));
 console.log('✅ /stripe-account');
 app.use('/dev', require('./routes/devRoutes'));
