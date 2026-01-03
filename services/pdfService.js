@@ -384,10 +384,10 @@ const generateAttestationPDF = async (adhesion) => {
          .fillColor('#000000');
       
       const organismeNom = adhesion.organisme === 'SAR' 
-        ? 'Syndicat Apicole de La Réunion (SAR)' 
-        : 'Association de la Maison de l\'Apiculture de La Réunion (AMAIR)';
+        ? 'du Syndicat Apicole de La Réunion (SAR)' 
+        : 'de l\'Association de la Maison de l\'Apiculture de La Réunion (AMAIR)';
       
-      doc.text(`est adhérent(e) en règle du ${organismeNom} pour l'année ${adhesion.annee}.`, {
+      doc.text(`est adhérent(e) ${organismeNom} et est à jour de ses cotisations pour l'année ${adhesion.annee}.`, {
         align: 'left'
       });
 
@@ -791,7 +791,7 @@ const generateBulletinAdhesionPDF = async (adhesion) => {
       const orgLabel = adhesion.organisme === 'SAR' 
         ? 'Syndicat Apicole de La Réunion (SAR)' 
         : 'Association de la Maison de l\'Apiculture de La Réunion (AMAIR)';
-      doc.text(`Je déclare adhérer au ${orgLabel}`, 70, checkboxY, { width: 450 });
+      doc.text(`Je demande l'adhésion au ${orgLabel}`, 70, checkboxY, { width: 450 });
       
       doc.moveDown(2);
 
