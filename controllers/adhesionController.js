@@ -2,24 +2,37 @@ const asyncHandler = require('express-async-handler');
 const Adhesion = require('../models/adhesionModel');
 const Parametre = require('../models/parametreModel');
 const User = require('../models/userModel');
-const nodemailer = require('nodemailer');
+const axios = require('axios');
 const { generateAndUploadAdhesionPDF, generateAndUploadBulletinAdhesion } = require('../services/pdfService');
 const { getSignedUrl } = require('../services/s3Service');
 const { notifyAdminsNewAdhesion } = require('../services/adminNotificationService');
 
-// Configuration du transporteur SMTP
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST,
-  port: process.env.SMTP_PORT,
-  secure: false,
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-  },
-  tls: {
-    rejectUnauthorized: false
-  }
-});
+// Fonction d'envoi d'email via Brevo API
+const sendAdhesionEmail = async (to, subject, html, organisme) => {
+  const emailFrom = organisme === 'AMAIR' 
+    ? process.env.EMAIL_FROM_AMAIR 
+    : process.env.EMAIL_FROM_SAR;
+
+  const response = await axios.post(
+    'https://api.brevo.com/v3/smtp/email',
+    {
+      sender: {
+        email: emailFrom,
+        name: organisme === 'AMAIR' ? 'AMAIR - Association Apicole' : 'SAR - Syndicat Apicole'
+      },
+      to: Array.isArray(to) ? to.map(email => ({ email })) : [{ email: to }],
+      subject: subject,
+      htmlContent: html
+    },
+    {
+      headers: {
+        'api-key': process.env.BREVO_API_KEY,
+        'Content-Type': 'application/json'
+      }
+    }
+  );
+  return response;
+};
 
 // @desc    Créer une nouvelle adhésion
 // @route   POST /api/adhesions
@@ -517,11 +530,10 @@ const requestPayment = asyncHandler(async (req, res) => {
   const paymentLink = `${process.env.FRONTEND_URL}/reglement-adhesion/${adhesion._id}`;
 
   try {
-    await transporter.sendMail({
-      from: `"${process.env.PLATFORM_NAME}" ${process.env.SMTP_FROM_EMAIL}`,
-      to: adhesion.user.email,
-      subject: `Demande de paiement - Adhésion ${adhesion.organisme} ${adhesion.annee}`,
-      html: `
+    await sendAdhesionEmail(
+      adhesion.user.email,
+      `Demande de paiement - Adhésion ${adhesion.organisme} ${adhesion.annee}`,
+      `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
           <h2 style="color: #4F46E5;">Bonjour ${adhesion.user.prenom} ${adhesion.user.nom},</h2>
           
@@ -551,7 +563,8 @@ const requestPayment = asyncHandler(async (req, res) => {
           </p>
         </div>
       `,
-    });
+      adhesion.organisme
+    );
 
     res.json({ 
       message: 'Email de demande de paiement envoyé avec succès',
@@ -646,11 +659,10 @@ const sendHelpRequest = asyncHandler(async (req, res) => {
 console.log(adhesion)
   // Envoyer l'email aux admins
   try {
-    await transporter.sendMail({
-      from: `"${process.env.PLATFORM_NAME}" <${process.env.SMTP_FROM_EMAIL}>`,
-      to: adminEmails.join(', '),
-      subject: `Demande d'aide - Adhésion ${adhesion.organisme} ${adhesion.annee}`,
-      html: `
+    await sendAdhesionEmail(
+      adminEmails,
+      `Demande d'aide - Adhésion ${adhesion.organisme} ${adhesion.annee}`,
+      `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
           <h2 style="color: #EF4444;">Demande d'aide</h2>
           
@@ -674,7 +686,8 @@ console.log(adhesion)
           </p>
         </div>
       `,
-    });
+      adhesion.organisme
+    );
 
     res.json({ 
       success: true,

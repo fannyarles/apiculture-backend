@@ -1,6 +1,6 @@
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const asyncHandler = require('express-async-handler');
-const nodemailer = require('nodemailer');
+const axios = require('axios');
 const Adhesion = require('../models/adhesionModel');
 const Service = require('../models/serviceModel');
 const Permission = require('../models/permissionModel');
@@ -8,19 +8,32 @@ const { generateAndUploadAttestation, generateAndUploadBulletinAdhesion } = requ
 const { notifyAdminsAdhesionPayment, notifyAdminsServicePayment } = require('../services/adminNotificationService');
 const { uploadFile, getSignedUrl, downloadAndUploadStripeReceipt } = require('../services/s3Service');
 
-// Configuration du transporteur SMTP
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST,
-  port: process.env.SMTP_PORT,
-  secure: false,
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-  },
-  tls: {
-    rejectUnauthorized: false
-  }
-});
+// Fonction d'envoi d'email via Brevo API
+const sendPaymentEmail = async (to, subject, html, organisme) => {
+  const emailFrom = organisme === 'AMAIR' 
+    ? process.env.EMAIL_FROM_AMAIR 
+    : process.env.EMAIL_FROM_SAR;
+
+  const response = await axios.post(
+    'https://api.brevo.com/v3/smtp/email',
+    {
+      sender: {
+        email: emailFrom,
+        name: organisme === 'AMAIR' ? 'AMAIR - Association Apicole' : 'SAR - Syndicat Apicole'
+      },
+      to: [{ email: to }],
+      subject: subject,
+      htmlContent: html
+    },
+    {
+      headers: {
+        'api-key': process.env.BREVO_API_KEY,
+        'Content-Type': 'application/json'
+      }
+    }
+  );
+  return response;
+};
 
 // @desc    Marquer un paiement comme effectué manuellement (admin)
 // @route   POST /api/payment/mark-paid/:adhesionId
@@ -497,12 +510,12 @@ const handleStripeWebhook = asyncHandler(async (req, res) => {
             `;
           }
 
-          await transporter.sendMail({
-            from: `"${process.env.PLATFORM_NAME}" ${process.env.SMTP_FROM_EMAIL}`,
-            to: service.user.email,
-            subject: `Confirmation de paiement - ${service.nom} ${service.annee}`,
-            html: emailContent,
-          });
+          await sendPaymentEmail(
+            service.user.email,
+            `Confirmation de paiement - ${service.nom} ${service.annee}`,
+            emailContent,
+            service.organisme
+          );
 
           // Notifier les admins du paiement de service
           try {
@@ -586,12 +599,12 @@ const handleStripeWebhook = asyncHandler(async (req, res) => {
               </div>
             `;
 
-            await transporter.sendMail({
-              from: `"${process.env.PLATFORM_NAME}" ${process.env.SMTP_FROM_EMAIL}`,
-              to: service.user.email,
-              subject: `Paiement reçu - Modification Services de l'UNAF ${service.annee}`,
-              html: emailContent,
-            });
+            await sendPaymentEmail(
+              service.user.email,
+              `Paiement reçu - Modification Services de l'UNAF ${service.annee}`,
+              emailContent,
+              service.organisme
+            );
 
             console.log(`✅ Paiement modification reçu pour le service ${service._id}, modification index ${historiqueEntryIndex} (en attente de validation)`);
           }
@@ -797,12 +810,12 @@ const handleStripeWebhook = asyncHandler(async (req, res) => {
           </div>
         `;
         
-        await transporter.sendMail({
-          from: `"${process.env.PLATFORM_NAME}" ${process.env.SMTP_FROM_EMAIL}`,
-          to: adhesion.user.email,
-          subject: `Confirmation de paiement - Adhésion ${adhesion.organisme} ${adhesion.annee}`,
-          html: emailContent,
-        });
+        await sendPaymentEmail(
+          adhesion.user.email,
+          `Confirmation de paiement - Adhésion ${adhesion.organisme} ${adhesion.annee}`,
+          emailContent,
+          adhesion.organisme
+        );
 
         // Notifier les admins du paiement d'adhésion
         try {
@@ -894,11 +907,10 @@ const sendPaymentLink = asyncHandler(async (req, res) => {
 
   // Envoyer l'email
   try {
-    await transporter.sendMail({
-      from: `"${process.env.PLATFORM_NAME}" <${process.env.SMTP_FROM_EMAIL}>`,
-      to: adhesion.user.email,
-      subject: `Lien de paiement - Adhésion ${adhesion.organisme} ${adhesion.annee}`,
-      html: `
+    await sendPaymentEmail(
+      adhesion.user.email,
+      `Lien de paiement - Adhésion ${adhesion.organisme} ${adhesion.annee}`,
+      `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
           <h2 style="color: #4F46E5;">Finaliser votre adhésion</h2>
           
@@ -931,7 +943,8 @@ const sendPaymentLink = asyncHandler(async (req, res) => {
           </p>
         </div>
       `,
-    });
+      adhesion.organisme
+    );
 
     adhesion.paiement.lienEnvoye = true;
     adhesion.paiement.dateLienEnvoye = new Date();
@@ -966,11 +979,10 @@ const requestPayment = asyncHandler(async (req, res) => {
 
   // Envoyer d'abord l'email - ne mettre à jour le statut que si l'envoi réussit
   try {
-    await transporter.sendMail({
-      from: `"${process.env.PLATFORM_NAME}" <${process.env.SMTP_FROM_EMAIL}>`,
-      to: adhesion.user.email,
-      subject: `Demande de paiement - Adhésion ${adhesion.organisme} ${adhesion.annee}`,
-      html: `
+    await sendPaymentEmail(
+      adhesion.user.email,
+      `Demande de paiement - Adhésion ${adhesion.organisme} ${adhesion.annee}`,
+      `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
           <h2 style="color: #4F46E5;">Paiement de votre adhésion</h2>
           
@@ -990,7 +1002,8 @@ const requestPayment = asyncHandler(async (req, res) => {
           </p>
         </div>
       `,
-    });
+      adhesion.organisme
+    );
 
     // Email envoyé avec succès - maintenant mettre à jour le statut
     adhesion.status = 'paiement_demande';

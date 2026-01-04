@@ -8,7 +8,7 @@ const User = require('../models/userModel');
 const { getDestinataires } = require('../controllers/communicationController');
 const { envoyerCommunication } = require('../services/emailService');
 const { generateUNAFExcel, isExportDate, EXPORT_DATES_2026 } = require('../services/unafExportService');
-const nodemailer = require('nodemailer');
+const axios = require('axios');
 
 /**
  * Cron job qui s'exécute le 31 décembre à 23:59
@@ -386,55 +386,52 @@ const generateUNAFExportCron = () => {
 };
 
 /**
- * Configuration du transporteur email pour les rappels d'activation
- */
-const getTransporter = () => {
-  return nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port: process.env.SMTP_PORT,
-    secure: process.env.SMTP_SECURE === 'true',
-    auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS,
-    },
-  });
-};
-
-/**
- * Envoyer l'email de rappel d'activation
+ * Envoyer l'email de rappel d'activation via Brevo API
  */
 const sendActivationReminderEmail = async (user) => {
-  const transporter = getTransporter();
   const loginUrl = `${process.env.FRONTEND_URL}/login`;
+  const emailFrom = process.env.EMAIL_FROM_SAR;
   
-  const mailOptions = {
-    from: `"Abeille Réunion" <${process.env.SMTP_FROM || process.env.SMTP_USER}>`,
-    to: user.email,
-    subject: '⚠️ Rappel : Activez votre compte Abeille Réunion',
-    html: `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <div style="background-color: #ef4444; padding: 20px; text-align: center;">
-          <h1 style="color: white; margin: 0;">⚠️ Rappel Important</h1>
+  const htmlContent = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+      <div style="background-color: #ef4444; padding: 20px; text-align: center;">
+        <h1 style="color: white; margin: 0;">⚠️ Rappel Important</h1>
+      </div>
+      <div style="padding: 30px; background-color: #f9fafb;">
+        <h2 style="color: #1e293b;">Bonjour ${user.prenom} ${user.nom},</h2>
+        <p style="color: #475569;">Votre compte sur <strong>Abeille Réunion</strong> n'a pas encore été activé.</p>
+        <div style="background-color: #fee2e2; border: 2px solid #ef4444; border-radius: 8px; padding: 20px; margin: 20px 0; text-align: center;">
+          <p style="margin: 0; color: #991b1b; font-size: 18px; font-weight: bold;">🗓️ Votre compte sera supprimé dans 7 jours</p>
+          <p style="margin: 10px 0 0 0; color: #991b1b;">Ainsi que tout votre historique d'adhésions.</p>
         </div>
-        <div style="padding: 30px; background-color: #f9fafb;">
-          <h2 style="color: #1e293b;">Bonjour ${user.prenom} ${user.nom},</h2>
-          <p style="color: #475569;">Votre compte sur <strong>Abeille Réunion</strong> n'a pas encore été activé.</p>
-          <div style="background-color: #fee2e2; border: 2px solid #ef4444; border-radius: 8px; padding: 20px; margin: 20px 0; text-align: center;">
-            <p style="margin: 0; color: #991b1b; font-size: 18px; font-weight: bold;">🗓️ Votre compte sera supprimé dans 7 jours</p>
-            <p style="margin: 10px 0 0 0; color: #991b1b;">Ainsi que tout votre historique d'adhésions.</p>
-          </div>
-          <div style="text-align: center; margin: 30px 0;">
-            <a href="${loginUrl}" style="background-color: #ef4444; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">Activer mon compte maintenant</a>
-          </div>
-        </div>
-        <div style="background-color: #1e293b; padding: 20px; text-align: center;">
-          <p style="color: #94a3b8; margin: 0; font-size: 12px;">© ${new Date().getFullYear()} Abeille Réunion. Tous droits réservés.</p>
+        <div style="text-align: center; margin: 30px 0;">
+          <a href="${loginUrl}" style="background-color: #ef4444; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">Activer mon compte maintenant</a>
         </div>
       </div>
-    `,
-  };
+      <div style="background-color: #1e293b; padding: 20px; text-align: center;">
+        <p style="color: #94a3b8; margin: 0; font-size: 12px;">© ${new Date().getFullYear()} Abeille Réunion. Tous droits réservés.</p>
+      </div>
+    </div>
+  `;
   
-  await transporter.sendMail(mailOptions);
+  await axios.post(
+    'https://api.brevo.com/v3/smtp/email',
+    {
+      sender: {
+        email: emailFrom,
+        name: 'Abeille Réunion'
+      },
+      to: [{ email: user.email }],
+      subject: '⚠️ Rappel : Activez votre compte Abeille Réunion',
+      htmlContent: htmlContent
+    },
+    {
+      headers: {
+        'api-key': process.env.BREVO_API_KEY,
+        'Content-Type': 'application/json'
+      }
+    }
+  );
 };
 
 /**

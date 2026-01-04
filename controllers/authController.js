@@ -1,23 +1,40 @@
 const jwt = require('jsonwebtoken');
 const asyncHandler = require('express-async-handler');
 const crypto = require('crypto');
-const nodemailer = require('nodemailer');
+const axios = require('axios');
 const User = require('../models/userModel');
 const Permission = require('../models/permissionModel');
 
-// Configuration du transporteur SMTP pour les emails
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST,
-  port: process.env.SMTP_PORT,
-  secure: false,
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-  },
-  tls: {
-    rejectUnauthorized: false
+// Fonction d'envoi d'email via Brevo API
+const sendAuthEmail = async (to, subject, html, replyTo = null) => {
+  const emailFrom = process.env.EMAIL_FROM_SAR;
+
+  const payload = {
+    sender: {
+      email: emailFrom,
+      name: 'Abeille Réunion'
+    },
+    to: [{ email: to }],
+    subject: subject,
+    htmlContent: html
+  };
+
+  if (replyTo) {
+    payload.replyTo = { email: replyTo };
   }
-});
+
+  const response = await axios.post(
+    'https://api.brevo.com/v3/smtp/email',
+    payload,
+    {
+      headers: {
+        'api-key': process.env.BREVO_API_KEY,
+        'Content-Type': 'application/json'
+      }
+    }
+  );
+  return response;
+};
 
 // Générer un token JWT
 const generateToken = (id) => {
@@ -348,12 +365,11 @@ const forgotPassword = asyncHandler(async (req, res) => {
   `;
 
   try {
-    await transporter.sendMail({
-      from: `"${process.env.PLATFORM_NAME}" ${process.env.SMTP_FROM_EMAIL}`,
-      to: user.email,
-      subject: 'Réinitialisation de mot de passe',
-      html: message,
-    });
+    await sendAuthEmail(
+      user.email,
+      'Réinitialisation de mot de passe',
+      message
+    );
 
     res.json({ 
       success: true,
@@ -461,13 +477,12 @@ const contactAdmin = asyncHandler(async (req, res) => {
   `;
 
   try {
-    await transporter.sendMail({
-      from: `"Abeille Réunion" <${process.env.SMTP_USER}>`,
-      to: adminEmail,
-      replyTo: user.email,
-      subject: `[Contact] ${emailSubject} - ${user.prenom} ${user.nom}`,
-      html: emailContent,
-    });
+    await sendAuthEmail(
+      adminEmail,
+      `[Contact] ${emailSubject} - ${user.prenom} ${user.nom}`,
+      emailContent,
+      user.email
+    );
 
     res.json({
       success: true,

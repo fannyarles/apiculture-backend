@@ -1,17 +1,33 @@
 const User = require('../models/userModel');
 const NotificationSettings = require('../models/notificationSettingsModel');
-const nodemailer = require('nodemailer');
+const axios = require('axios');
 
-// Configuration du transporteur SMTP
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST,
-  port: process.env.SMTP_PORT,
-  secure: false,
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-  },
-});
+// Fonction d'envoi d'email via Brevo API
+const sendNotificationEmail = async (to, subject, html, organisme) => {
+  const emailFrom = organisme === 'AMAIR' 
+    ? process.env.EMAIL_FROM_AMAIR 
+    : process.env.EMAIL_FROM_SAR;
+
+  const response = await axios.post(
+    'https://api.brevo.com/v3/smtp/email',
+    {
+      sender: {
+        email: emailFrom,
+        name: organisme === 'AMAIR' ? 'AMAIR - Association Apicole' : 'SAR - Syndicat Apicole'
+      },
+      to: [{ email: to }],
+      subject: subject,
+      htmlContent: html
+    },
+    {
+      headers: {
+        'api-key': process.env.BREVO_API_KEY,
+        'Content-Type': 'application/json'
+      }
+    }
+  );
+  return response;
+};
 
 /**
  * Récupère les admins à notifier pour un organisme et un type de notification donnés
@@ -93,12 +109,12 @@ const notifyAdminsNewAdhesion = async (adhesion) => {
     // Envoyer à chaque admin
     for (const admin of adminsToNotify) {
       try {
-        await transporter.sendMail({
-          from: `"${process.env.PLATFORM_NAME}" <${process.env.SMTP_FROM_EMAIL}>`,
-          to: admin.email,
-          subject: `[${adhesion.organisme}] Nouvelle demande d'adhésion - ${userName}`,
-          html: emailContent,
-        });
+        await sendNotificationEmail(
+          admin.email,
+          `[${adhesion.organisme}] Nouvelle demande d'adhésion - ${userName}`,
+          emailContent,
+          adhesion.organisme
+        );
         console.log(`📧 Notification nouvelle adhésion envoyée à ${admin.email}`);
       } catch (emailError) {
         console.error(`Erreur envoi notification à ${admin.email}:`, emailError.message);
@@ -151,12 +167,12 @@ const notifyAdminsAdhesionPayment = async (adhesion) => {
     // Envoyer à chaque admin
     for (const admin of adminsToNotify) {
       try {
-        await transporter.sendMail({
-          from: `"${process.env.PLATFORM_NAME}" <${process.env.SMTP_FROM_EMAIL}>`,
-          to: admin.email,
-          subject: `[${adhesion.organisme}] Paiement reçu - Adhésion ${userName}`,
-          html: emailContent,
-        });
+        await sendNotificationEmail(
+          admin.email,
+          `[${adhesion.organisme}] Paiement reçu - Adhésion ${userName}`,
+          emailContent,
+          adhesion.organisme
+        );
         console.log(`📧 Notification paiement adhésion envoyée à ${admin.email}`);
       } catch (emailError) {
         console.error(`Erreur envoi notification à ${admin.email}:`, emailError.message);
@@ -216,12 +232,12 @@ const notifyAdminsServicePayment = async (service) => {
     // Envoyer à chaque admin
     for (const admin of adminsToNotify) {
       try {
-        await transporter.sendMail({
-          from: `"${process.env.PLATFORM_NAME}" <${process.env.SMTP_FROM_EMAIL}>`,
-          to: admin.email,
-          subject: `[${organisme}] Paiement reçu - ${serviceName} - ${userName}`,
-          html: emailContent,
-        });
+        await sendNotificationEmail(
+          admin.email,
+          `[${organisme}] Paiement reçu - ${serviceName} - ${userName}`,
+          emailContent,
+          organisme
+        );
         console.log(`📧 Notification paiement service envoyée à ${admin.email}`);
       } catch (emailError) {
         console.error(`Erreur envoi notification à ${admin.email}:`, emailError.message);
