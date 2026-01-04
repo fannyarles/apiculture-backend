@@ -44,7 +44,7 @@ const createService = asyncHandler(async (req, res) => {
 
   if (typeService === 'assurance_unaf' && adhesion.organisme !== 'SAR') {
     res.status(400);
-    throw new Error('Le service Assurance UNAF est réservé aux adhérents SAR');
+    throw new Error('Les services de l\'UNAF sont réservés aux adhérents SAR');
   }
 
   // Vérifier qu'il n'existe pas déjà une souscription pour ce service/année
@@ -70,7 +70,7 @@ const createService = asyncHandler(async (req, res) => {
     montant = 25; // Droit d'usage
     montantCaution = 300; // Caution
   } else if (typeService === 'assurance_unaf') {
-    nom = 'Assurance UNAF';
+    nom = 'Services UNAF';
     
     // Récupérer les données UNAF depuis la requête
     const { unafOptions } = req.body;
@@ -501,7 +501,7 @@ const canSubscribeMiellerie = asyncHandler(async (req, res) => {
   });
 });
 
-// @desc    Vérifier si l'utilisateur peut souscrire au service Assurance UNAF
+// @desc    Vérifier si l'utilisateur peut souscrire au services de l'UNAF
 // @route   GET /api/services/can-subscribe/assurance-unaf
 // @access  Private
 const canSubscribeUNAF = asyncHandler(async (req, res) => {
@@ -533,7 +533,7 @@ const canSubscribeUNAF = asyncHandler(async (req, res) => {
   if (existingService) {
     return res.json({
       canSubscribe: false,
-      reason: 'Vous avez déjà souscrit à l\'Assurance UNAF pour cette année',
+      reason: 'Vous avez déjà souscrit aux services de l\'UNAF pour cette année',
       adhesion: adhesionSAR,
       existingService,
     });
@@ -573,7 +573,7 @@ const modifyUNAFSubscription = asyncHandler(async (req, res) => {
   // Vérifier que c'est bien un service UNAF
   if (service.typeService !== 'assurance_unaf') {
     res.status(400);
-    throw new Error('Ce service n\'est pas une assurance UNAF');
+    throw new Error('Ce service n\'est pas un service UNAF');
   }
 
   // Vérifier que l'utilisateur est propriétaire

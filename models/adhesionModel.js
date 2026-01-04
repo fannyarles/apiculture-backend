@@ -126,6 +126,10 @@ const adhesionSchema = mongoose.Schema(
     bulletinUrl: {
       type: String,
     },
+    // Reçu de paiement Stripe
+    receiptKey: {
+      type: String,
+    },
     // Informations personnelles (snapshot au moment de l'adhésion)
     informationsPersonnelles: {
       typePersonne: {

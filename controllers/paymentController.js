@@ -6,7 +6,7 @@ const Service = require('../models/serviceModel');
 const Permission = require('../models/permissionModel');
 const { generateAndUploadAttestation, generateAndUploadBulletinAdhesion } = require('../services/pdfService');
 const { notifyAdminsAdhesionPayment, notifyAdminsServicePayment } = require('../services/adminNotificationService');
-const { uploadFile, getSignedUrl } = require('../services/s3Service');
+const { uploadFile, getSignedUrl, downloadAndUploadStripeReceipt } = require('../services/s3Service');
 
 // Configuration du transporteur SMTP
 const transporter = nodemailer.createTransport({
@@ -262,6 +262,7 @@ const createPaymentSession = asyncHandler(async (req, res) => {
         },
       ],
       mode: 'payment',
+      locale: 'fr',
       success_url: `${process.env.FRONTEND_URL}/dashboard?success=true&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${process.env.FRONTEND_URL}/dashboard?canceled=true`,
       customer_email: adhesion.user.email,
@@ -369,6 +370,31 @@ const handleStripeWebhook = asyncHandler(async (req, res) => {
             service.status = 'en_attente_caution';
           }
           
+          // Sauvegarder le reçu Stripe sur S3
+          try {
+            const charge = await stripe.charges.retrieve(session.payment_intent, {
+              expand: ['payment_intent']
+            }).catch(() => null);
+            
+            // Si pas trouvé via charges, essayer via payment_intent
+            let receiptUrl = charge?.receipt_url;
+            if (!receiptUrl) {
+              const paymentIntent = await stripe.paymentIntents.retrieve(session.payment_intent);
+              if (paymentIntent.latest_charge) {
+                const chargeFromPI = await stripe.charges.retrieve(paymentIntent.latest_charge);
+                receiptUrl = chargeFromPI.receipt_url;
+              }
+            }
+            
+            if (receiptUrl) {
+              const receiptResult = await downloadAndUploadStripeReceipt(receiptUrl, session.payment_intent, 'service');
+              service.receiptKey = receiptResult.key;
+              console.log(`✅ Reçu service sauvegardé: ${receiptResult.key}`);
+            }
+          } catch (receiptError) {
+            console.error('Erreur sauvegarde reçu service:', receiptError.message);
+          }
+          
           await service.save();
 
           // Générer l'attestation si le service est actif
@@ -401,14 +427,14 @@ const handleStripeWebhook = asyncHandler(async (req, res) => {
           let emailContent;
           
           if (service.typeService === 'assurance_unaf') {
-            // Email spécifique pour l'assurance UNAF
+            // Email spécifique pour les services de l'UNAF
             emailContent = `
               <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                <h2 style="color: #16a34a;">✅ Paiement confirmé - Assurance UNAF</h2>
+                <h2 style="color: #16a34a;">✅ Paiement confirmé - Services de l'UNAF</h2>
                 
                 <p>Bonjour ${service.user.prenom} ${service.user.nom},</p>
                 
-                <p>Nous avons bien reçu votre paiement de <strong>${service.paiement.montant.toFixed(2)} €</strong> pour votre souscription à l'Assurance UNAF.</p>
+                <p>Nous avons bien reçu votre paiement de <strong>${service.paiement.montant.toFixed(2)} €</strong> pour votre souscription aux services de l'UNAF.</p>
                 
                 <div style="background-color: #F3F4F6; padding: 20px; border-radius: 8px; margin: 20px 0;">
                   <p style="margin: 5px 0;"><strong>Service :</strong> ${service.nom}</p>
@@ -417,7 +443,7 @@ const handleStripeWebhook = asyncHandler(async (req, res) => {
                   <p style="margin: 5px 0;"><strong>Date de paiement :</strong> ${new Date().toLocaleDateString('fr-FR')}</p>
                 </div>
                 
-                <p>Votre souscription à l'Assurance UNAF est maintenant <strong style="color: #16a34a;">active</strong>.</p>
+                <p>Votre souscription aux services de l'UNAF est maintenant <strong style="color: #16a34a;">active</strong>.</p>
                 <p>Votre attestation d'adhésion est disponible dans votre espace personnel.</p>
                 
                 <p>Vous pouvez consulter vos services à tout moment depuis votre espace personnel.</p>
@@ -507,6 +533,21 @@ const handleStripeWebhook = asyncHandler(async (req, res) => {
             historiqueEntry.paiement.datePaiement = new Date();
             historiqueEntry.paiement.stripePaymentIntentId = session.payment_intent;
             
+            // Sauvegarder le reçu Stripe sur S3
+            try {
+              const paymentIntent = await stripe.paymentIntents.retrieve(session.payment_intent);
+              if (paymentIntent.latest_charge) {
+                const charge = await stripe.charges.retrieve(paymentIntent.latest_charge);
+                if (charge.receipt_url) {
+                  const receiptResult = await downloadAndUploadStripeReceipt(charge.receipt_url, session.payment_intent, 'modification');
+                  historiqueEntry.paiement.receiptKey = receiptResult.key;
+                  console.log(`✅ Reçu modification sauvegardé: ${receiptResult.key}`);
+                }
+              }
+            } catch (receiptError) {
+              console.error('Erreur sauvegarde reçu modification:', receiptError.message);
+            }
+            
             // Appliquer les modifications au service
             if (historiqueEntry.modifications.assuranceFormule) {
               service.unafData.options.assurance = {
@@ -535,11 +576,11 @@ const handleStripeWebhook = asyncHandler(async (req, res) => {
             // Envoyer email de confirmation
             const emailContent = `
               <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                <h2 style="color: #16a34a;">✅ Modification confirmée - Assurance UNAF</h2>
+                <h2 style="color: #16a34a;">✅ Modification confirmée - Services de l'UNAF</h2>
                 
                 <p>Bonjour ${service.user.prenom} ${service.user.nom},</p>
                 
-                <p>Nous avons bien reçu votre paiement de <strong>${historiqueEntry.montantSupplementaire.toFixed(2)} €</strong> pour la modification de votre souscription à l'Assurance UNAF.</p>
+                <p>Nous avons bien reçu votre paiement de <strong>${historiqueEntry.montantSupplementaire.toFixed(2)} €</strong> pour la modification de votre souscription aux services de l'UNAF.</p>
                 
                 <div style="background-color: #F3F4F6; padding: 20px; border-radius: 8px; margin: 20px 0;">
                   <p style="margin: 5px 0;"><strong>Service :</strong> ${service.nom}</p>
@@ -561,7 +602,7 @@ const handleStripeWebhook = asyncHandler(async (req, res) => {
             await transporter.sendMail({
               from: `"${process.env.PLATFORM_NAME}" ${process.env.SMTP_FROM_EMAIL}`,
               to: service.user.email,
-              subject: `Confirmation de modification - Assurance UNAF ${service.annee}`,
+              subject: `Confirmation de modification - Services UNAF ${service.annee}`,
               html: emailContent,
             });
 
@@ -584,6 +625,22 @@ const handleStripeWebhook = asyncHandler(async (req, res) => {
         adhesion.paiement.stripePaymentIntentId = session.payment_intent;
         adhesion.status = 'actif';
         adhesion.dateValidation = new Date();
+        
+        // Sauvegarder le reçu Stripe sur S3
+        try {
+          const paymentIntent = await stripe.paymentIntents.retrieve(session.payment_intent);
+          if (paymentIntent.latest_charge) {
+            const charge = await stripe.charges.retrieve(paymentIntent.latest_charge);
+            if (charge.receipt_url) {
+              const receiptResult = await downloadAndUploadStripeReceipt(charge.receipt_url, session.payment_intent, 'adhesion');
+              adhesion.receiptKey = receiptResult.key;
+              console.log(`✅ Reçu adhésion sauvegardé: ${receiptResult.key}`);
+            }
+          }
+        } catch (receiptError) {
+          console.error('Erreur sauvegarde reçu adhésion:', receiptError.message);
+        }
+        
         await adhesion.save();
         
         // Générer et uploader l'attestation d'adhésion
@@ -1008,7 +1065,7 @@ const createServicePaymentSession = asyncHandler(async (req, res) => {
     }
   } else if (service.typeService === 'assurance_unaf') {
     destinationAccount = process.env.STRIPE_ACCOUNT_SAR;
-    serviceDescription = `Assurance UNAF via le Syndicat Apicole de La Réunion`;
+    serviceDescription = `Services de l'UNAF via le Syndicat Apicole de La Réunion`;
     if (!destinationAccount) {
       console.warn('⚠️  Compte Stripe SAR non configuré. Le paiement ira sur le compte principal.');
     }
@@ -1031,6 +1088,7 @@ const createServicePaymentSession = asyncHandler(async (req, res) => {
         },
       ],
       mode: 'payment',
+      locale: 'fr',
       success_url: `${process.env.FRONTEND_URL}/dashboard?service_success=true&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${process.env.FRONTEND_URL}/dashboard?service_canceled=true`,
       customer_email: service.user.email,
@@ -1419,7 +1477,7 @@ const createUNAFModificationPaymentSession = asyncHandler(async (req, res) => {
           price_data: {
             currency: 'eur',
             product_data: {
-              name: `Modification Assurance UNAF - ${service.annee}`,
+              name: `Modification services UNAF - ${service.annee}`,
               description: `Supplément pour modification de votre souscription UNAF`,
             },
             unit_amount: Math.round(montant * 100),
@@ -1428,6 +1486,7 @@ const createUNAFModificationPaymentSession = asyncHandler(async (req, res) => {
         },
       ],
       mode: 'payment',
+      locale: 'fr',
       success_url: `${process.env.FRONTEND_URL}/service/${serviceId}?modification_success=true&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${process.env.FRONTEND_URL}/service/${serviceId}?modification_canceled=true`,
       customer_email: service.user.email,

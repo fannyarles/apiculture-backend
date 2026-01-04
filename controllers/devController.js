@@ -73,7 +73,7 @@ const FAKE_ADHESION_AMAIR = {
 const FAKE_SERVICE_UNAF = {
   _id: 'fake-service-unaf-123',
   user: FAKE_USER,
-  nom: 'Assurance UNAF',
+  nom: 'Services de l\'UNAF',
   typeService: 'assurance_unaf',
   annee: 2025,
   status: 'valide',
@@ -190,8 +190,8 @@ const PDF_TYPES = {
     description: 'Attestation officielle d\'adhésion à l\'AMAIR',
   },
   attestation_service_unaf: {
-    name: 'Attestation service UNAF',
-    description: 'Attestation de souscription à l\'assurance UNAF',
+    name: 'Attestation d\'adhésion aux services de l\'UNAF',
+    description: 'Attestation de souscription aux services de l\'UNAF',
   },
   attestation_service_generic: {
     name: 'Attestation service générique',

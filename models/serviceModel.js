@@ -119,6 +119,10 @@ const serviceSchema = mongoose.Schema(
     ecocontributionAttestationUrl: {
       type: String,
     },
+    // Reçu de paiement Stripe
+    receiptKey: {
+      type: String,
+    },
     // Document de preuve de paiement (uploadé par l'admin)
     documentPaiement: {
       nom: String,
@@ -142,7 +146,7 @@ const serviceSchema = mongoose.Schema(
       telephone: String,
       email: String,
     },
-    // Données spécifiques au service Assurance UNAF
+    // Données spécifiques aux services  de l'UNAF
     unafData: {
       siret: String,
       nombreEmplacements: Number,
@@ -222,6 +226,7 @@ const serviceSchema = mongoose.Schema(
           default: 'en_attente',
         },
         datePaiement: Date,
+        receiptKey: String,
       },
       signature: String,
       signatureDate: Date,

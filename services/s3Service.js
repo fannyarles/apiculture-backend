@@ -151,11 +151,55 @@ const downloadFile = async (key) => {
   }
 };
 
+/**
+ * Télécharge un reçu Stripe depuis son URL et l'upload vers S3
+ * @param {string} receiptUrl - L'URL du reçu Stripe
+ * @param {string} paymentIntentId - L'ID du PaymentIntent pour nommer le fichier
+ * @param {string} type - Le type de paiement ('adhesion', 'service', 'modification')
+ * @returns {Promise<Object>} - Clé S3 du fichier uploadé
+ */
+const downloadAndUploadStripeReceipt = async (receiptUrl, paymentIntentId, type = 'adhesion') => {
+  const axios = require('axios');
+  
+  try {
+    // Télécharger le reçu depuis Stripe (format PDF)
+    const response = await axios.get(receiptUrl, { 
+      responseType: 'arraybuffer',
+      timeout: 30000
+    });
+    
+    const pdfBuffer = Buffer.from(response.data);
+    const fileName = `recu_${type}_${paymentIntentId}.pdf`;
+    const key = `recus/${type}/${Date.now()}-${fileName}`;
+    
+    const params = {
+      Bucket: bucketName,
+      Key: key,
+      Body: pdfBuffer,
+      ContentType: 'application/pdf',
+      ACL: 'private'
+    };
+
+    await s3.upload(params).promise();
+    
+    console.log(`✅ Reçu Stripe uploadé: ${key}`);
+    
+    return {
+      key: key,
+      fileName: fileName
+    };
+  } catch (error) {
+    console.error('Erreur téléchargement/upload reçu Stripe:', error.message);
+    throw new Error('Erreur lors de la sauvegarde du reçu de paiement');
+  }
+};
+
 module.exports = {
   uploadFile,
   getSignedUrl,
   deleteFile,
   listFiles,
   fileExists,
-  downloadFile
+  downloadFile,
+  downloadAndUploadStripeReceipt
 };
