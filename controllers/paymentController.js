@@ -167,6 +167,7 @@ const markPaymentAsPaid = asyncHandler(async (req, res) => {
               adherentSAR: true,
             },
           },
+          signature: adhesion.signature,
         });
         await adhesionAMAIR.save();
         
@@ -703,6 +704,7 @@ const handleStripeWebhook = asyncHandler(async (req, res) => {
                     adherentSAR: true
                   }
                 },
+                signature: adhesion.signature,
               });
               await adhesionAMAIR.save();
               adhesionAMAIRCreee = true;
