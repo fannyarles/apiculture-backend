@@ -607,7 +607,7 @@ const generateBulletinAdhesionPDF = async (adhesion) => {
       
       doc.fontSize(valueSize).fillColor('#000000');
       doc.text(user.email || '-', userTableLeft, userY + 12);
-      const tel = user.telephoneMobile || user.telephone || '-';
+      const tel = infosPerso.telephoneMobile || user.telephoneMobile || infosPerso.telephone || user.telephone || '-';
       doc.text(tel, userTableLeft + colWidth, userY + 12);
       
       userY += userRowHeight;
