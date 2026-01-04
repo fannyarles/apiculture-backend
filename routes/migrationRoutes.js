@@ -6,7 +6,6 @@ const asyncHandler = require('express-async-handler');
 const { protect, superAdmin } = require('../middleware/authMiddleware');
 const User = require('../models/userModel');
 const Adhesion = require('../models/adhesionModel');
-const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const sendEmail = require('../services/emailService');
 
@@ -243,16 +242,13 @@ router.post('/import-adhesions', protect, superAdmin, asyncHandler(async (req, r
         // Générer un mot de passe unique pour cet utilisateur
         tempPassword = crypto.randomBytes(6).toString('hex'); // 12 caractères
         
-        // Créer l'utilisateur
-        const salt = await bcrypt.genSalt(10);
-        const hashedPassword = await bcrypt.hash(tempPassword, salt);
-        
+        // Créer l'utilisateur (le middleware pre-save du modèle User hache le mot de passe)
         user = await User.create({
           email: rowData.email.toLowerCase(),
           nom: rowData.nom || 'Non renseigné',
           prenom: rowData.prenom || 'Non renseigné',
           designation: rowData.designation || null,
-          password: hashedPassword,
+          password: tempPassword,
           telephone: rowData.telephone || null,
           telephoneMobile: rowData.telephoneMobile || null,
           dateNaissance: rowData.dateNaissance ? new Date(rowData.dateNaissance) : null,
@@ -358,8 +354,13 @@ router.post('/import-adhesions', protect, superAdmin, asyncHandler(async (req, r
       }
 
       // Normaliser le statut
+      const currentYear = new Date().getFullYear();
       let status = 'actif';
-      if (rowData.status) {
+      
+      // Si l'année est antérieure à l'année actuelle, le statut est "expiree"
+      if (rowData.annee < currentYear) {
+        status = 'expiree';
+      } else if (rowData.status) {
         const st = rowData.status.toLowerCase();
         if (st === 'en_attente' || st.includes('attente')) status = 'en_attente';
         else if (st === 'refuse' || st === 'refusé') status = 'refuse';
