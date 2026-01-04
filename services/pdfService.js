@@ -583,7 +583,7 @@ const generateBulletinAdhesionPDF = async (adhesion) => {
       
       doc.fontSize(valueSize).fillColor('#000000');
       doc.text(nomComplet, userTableLeft, userY + 12);
-      doc.text(user.dateNaissance ? new Date(user.dateNaissance).toLocaleDateString('fr-FR') : '-', userTableLeft + colWidth, userY + 12);
+      doc.text(infosPerso.dateNaissance ? new Date(infosPerso.dateNaissance).toLocaleDateString('fr-FR') : '-', userTableLeft + colWidth, userY + 12);
       
       userY += userRowHeight;
       
@@ -593,20 +593,20 @@ const generateBulletinAdhesionPDF = async (adhesion) => {
       doc.text('TÉLÉPHONE', userTableLeft + colWidth, userY);
       
       doc.fontSize(valueSize).fillColor('#000000');
-      doc.text(user.email || '-', userTableLeft, userY + 12);
+      doc.text(infosPerso.email || '-', userTableLeft, userY + 12);
       const tel = infosPerso.telephoneMobile || user.telephoneMobile || infosPerso.telephone || user.telephone || '-';
       doc.text(tel, userTableLeft + colWidth, userY + 12);
       
       userY += userRowHeight;
       
       // Ligne 3 : Adresse (pleine largeur)
-      if (user.adresse?.rue) {
+      if (infosPerso.adresse?.rue) {
         doc.fontSize(labelSize).fillColor('#747474');
         doc.text('ADRESSE', userTableLeft, userY);
         
         doc.fontSize(valueSize).fillColor('#000000');
-        const complement = user.adresse.complement ? ` ${user.adresse.complement}` : '';
-        const adresse = `${user.adresse.rue}${complement}, ${user.adresse.codePostal} ${user.adresse.ville}${user.adresse.pays ? ', ' + user.adresse.pays : ''}`;
+        const complement = infosPerso.adresse.complement ? ` ${infosPerso.adresse.complement}` : '';
+        const adresse = `${infosPerso.adresse.rue}${complement}, ${infosPerso.adresse.codePostal} ${infosPerso.adresse.ville}${infosPerso.adresse.pays ? ', ' + user.adresse.pays : ''}`;
         doc.text(adresse, userTableLeft, userY + 12, { width: colWidth * 2 });
         userY += userRowHeight;
       }
