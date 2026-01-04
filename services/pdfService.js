@@ -573,19 +573,6 @@ const generateBulletinAdhesionPDF = async (adhesion) => {
       
       let userY = doc.y;
       
-      // Ligne 0 (si personne morale) : Type | Raison sociale
-      if (isPersonneMorale) {
-        doc.fontSize(labelSize).fillColor('#747474').font('Helvetica');
-        doc.text('TYPE', userTableLeft, userY);
-        doc.text('RAISON SOCIALE', userTableLeft + colWidth, userY);
-        
-        doc.fontSize(valueSize).fillColor('#000000');
-        doc.text(typeLabels[typePersonne] || typePersonne, userTableLeft, userY + 12);
-        doc.text(infosPerso.raisonSociale || user.raisonSociale || '-', userTableLeft + colWidth, userY + 12);
-        
-        userY += userRowHeight;
-      }
-      
       // Ligne 1 : Nom/Prénom | Date de naissance
       const designation = infosPerso.designation || user.designation || '';
       const nomComplet = isPersonneMorale ? `${typeLabels[typePersonne]} – ${infosPerso.raisonSociale || user.raisonSociale}` : `${designation} ${user.nom} ${user.prenom}`;
@@ -1357,19 +1344,6 @@ const generateServiceAttestationPDF = async (service) => {
       const svcRowHeight = 32;
       
       let svcY = doc.y;
-      
-      // Ligne 0 (si personne morale) : Type | Raison sociale
-      if (svcIsPersonneMorale) {
-        doc.fontSize(svcLabelSize).fillColor('#747474').font('Helvetica');
-        doc.text('TYPE', svcTableLeft, svcY);
-        doc.text('RAISON SOCIALE', svcTableLeft + svcColWidth, svcY);
-        
-        doc.fontSize(svcValueSize).fillColor('#000000');
-        doc.text(svcTypeLabels[svcTypePersonne] || svcTypePersonne, svcTableLeft, svcY + 12);
-        doc.text(infos.raisonSociale || user.raisonSociale || '-', svcTableLeft + svcColWidth, svcY + 12);
-        
-        svcY += svcRowHeight;
-      }
       
       // Ligne 1 : Nom/Prénom
       doc.fontSize(svcLabelSize).fillColor('#747474').font('Helvetica');
