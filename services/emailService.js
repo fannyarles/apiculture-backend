@@ -461,7 +461,8 @@ const sendEmail = async ({ to, subject, html }) => {
       }
     );
 
-    console.log(`✅ Email envoyé à ${to}`);
+    console.log(`✅ Email envoyé à ${to} (messageId: ${response.data.messageId})`);
+    console.log(`   Expéditeur: ${emailFrom}`);
     return { success: true, messageId: response.data.messageId };
   } catch (error) {
     console.error(`Erreur envoi email à ${to}:`, error.response?.data || error.message);
