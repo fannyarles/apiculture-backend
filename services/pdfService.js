@@ -987,8 +987,20 @@ const generateUNAFAttestationPDF = async (service) => {
         adresseComplete = `${adresse.rue}${complement}, ${adresse.codePostal || ''} ${adresse.ville || ''}`.trim();
       }
       const nombreRuches = unafData.nombreRuches || 0;
-      const dateAdhesion = new Date(service.dateValidation || service.createdAt);
-      const dateAdhesionFormatee = dateAdhesion.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+      const dateValidation = new Date(service.dateValidation || service.createdAt);
+      const dateValidationFormatee = dateValidation.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+      
+      // Déterminer la date de début de période
+      const now = new Date();
+      const isJanuary2026 = now.getMonth() === 0 && now.getFullYear() === 2026;
+      const isMigrationUser = user.migrationUNAF2025 === true;
+      
+      let dateDebutPeriode;
+      if (isMigrationUser && isJanuary2026) {
+        dateDebutPeriode = `01/01/${service.annee}`;
+      } else {
+        dateDebutPeriode = dateValidationFormatee;
+      }
       
       doc.font('Helvetica');
       doc.text(`Nom de l'adhérent : `, { continued: true });
@@ -996,7 +1008,7 @@ const generateUNAFAttestationPDF = async (service) => {
       
       doc.font('Helvetica').text(`Demeurant : ${adresseComplete}`);
       doc.text(`Nombre de ruches : ${nombreRuches}`);
-      doc.text(`Adhérent à l'UNAF pour l'année en cours depuis le : ${dateAdhesionFormatee}`);
+      doc.text(`Adhérent à l'UNAF pour l'année en cours depuis le : ${dateValidationFormatee}`);
       
       doc.moveDown(0.5);
       
@@ -1007,7 +1019,7 @@ const generateUNAFAttestationPDF = async (service) => {
       
       // Période de validité
       doc.fontSize(11);
-      doc.text(`A réglé la cotisation due pour la PÉRIODE DE VALIDITÉ du 01/01/${service.annee} au 31/12/${service.annee} inclus.`, { align: 'left' });
+      doc.text(`A réglé la cotisation due pour la PÉRIODE DE VALIDITÉ du ${dateDebutPeriode} au 31/12/${service.annee} inclus.`, { align: 'left' });
       
       doc.moveDown(1);
       

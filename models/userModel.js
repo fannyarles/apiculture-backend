@@ -136,6 +136,10 @@ const userSchema = mongoose.Schema(
         default: Date.now,
       },
     }],
+    migrationUNAF2025: {
+      type: Boolean,
+      default: false,
+    },
     resetPasswordToken: {
       type: String,
       required: false,
