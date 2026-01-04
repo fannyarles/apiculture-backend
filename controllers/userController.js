@@ -18,8 +18,8 @@ const getUsers = asyncHandler(async (req, res) => {
     throw new Error('Accès non autorisé');
   }
 
-  // Construire le filtre de recherche - seulement les adhérents (pas les admins)
-  let userFilter = { role: 'user' };
+  // Construire le filtre de recherche - tous les utilisateurs (y compris les admins)
+  let userFilter = {};
   
   if (search) {
     userFilter.$or = [
