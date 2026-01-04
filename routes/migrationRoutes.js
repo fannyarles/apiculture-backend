@@ -236,19 +236,22 @@ router.post('/import-adhesions', protect, superAdmin, asyncHandler(async (req, r
       // Vérifier si l'email existe
       let user = await User.findOne({ email: rowData.email.toLowerCase() });
       let userCreated = false;
-      let tempPassword = null;
       
       if (!user && createUsers) {
-        // Générer un mot de passe unique pour cet utilisateur
-        tempPassword = crypto.randomBytes(6).toString('hex'); // 12 caractères
+        // Générer un mot de passe aléatoire (ne sera pas communiqué)
+        const randomPassword = crypto.randomBytes(16).toString('hex');
         
-        // Créer l'utilisateur (le middleware pre-save du modèle User hache le mot de passe)
+        // Générer un token d'invitation pour définir le mot de passe
+        const inviteToken = crypto.randomBytes(32).toString('hex');
+        const inviteTokenExpire = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 jours
+        
+        // Créer l'utilisateur
         user = await User.create({
           email: rowData.email.toLowerCase(),
           nom: rowData.nom || 'Non renseigné',
           prenom: rowData.prenom || 'Non renseigné',
           designation: rowData.designation || null,
-          password: tempPassword,
+          password: randomPassword,
           telephone: rowData.telephone || null,
           telephoneMobile: rowData.telephoneMobile || null,
           dateNaissance: rowData.dateNaissance ? new Date(rowData.dateNaissance) : null,
@@ -259,30 +262,35 @@ router.post('/import-adhesions', protect, superAdmin, asyncHandler(async (req, r
           },
           role: 'user',
           roles: ['user'],
+          resetPasswordToken: inviteToken,
+          resetPasswordExpire: inviteTokenExpire,
         });
         
         userCreated = true;
         
-        // Envoyer l'email de bienvenue avec les identifiants
+        // Envoyer l'email d'invitation pour définir son mot de passe
         if (sendWelcomeEmail) {
+          const inviteUrl = `${process.env.FRONTEND_URL}/reset-password/${inviteToken}`;
+          
           try {
             await sendEmail({
               to: user.email,
-              subject: 'Bienvenue sur la plateforme du Syndicat Apicole de La Réunion',
+              subject: 'Invitation - Créez votre compte sur la plateforme du Syndicat Apicole de La Réunion',
               html: `
                 <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
                   <h2 style="color: #D97706;">Bienvenue ${user.prenom} ${user.nom} !</h2>
                   <p>Votre compte a été créé sur la plateforme du <strong>Syndicat Apicole de La Réunion (SAR)</strong>.</p>
-                  <p><strong>Vos identifiants de connexion :</strong></p>
-                  <ul>
-                    <li>Email : <strong>${user.email}</strong></li>
-                    <li>Mot de passe : <strong>${tempPassword}</strong></li>
-                  </ul>
-                  <p>⚠️ Pour des raisons de sécurité, nous vous recommandons de changer votre mot de passe dès votre première connexion.</p>
-                  <p style="margin-top: 20px;">
-                    <a href="${process.env.FRONTEND_URL}/login" style="background-color: #D97706; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">
-                      Se connecter
+                  <p>Pour activer votre compte et définir votre mot de passe, cliquez sur le bouton ci-dessous :</p>
+                  <p style="margin-top: 20px; text-align: center;">
+                    <a href="${inviteUrl}" style="background-color: #D97706; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; display: inline-block;">
+                      Créer mon mot de passe
                     </a>
+                  </p>
+                  <p style="margin-top: 20px; color: #666; font-size: 13px;">
+                    Votre email de connexion : <strong>${user.email}</strong>
+                  </p>
+                  <p style="color: #999; font-size: 12px;">
+                    Ce lien est valable 7 jours. Si vous n'avez pas demandé ce compte, ignorez cet email.
                   </p>
                   <hr style="margin: 30px 0; border: none; border-top: 1px solid #eee;">
                   <p style="color: #666; font-size: 12px;">
