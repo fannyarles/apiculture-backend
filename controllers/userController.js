@@ -37,13 +37,18 @@ const getUsers = asyncHandler(async (req, res) => {
   // Récupérer les adhésions pour ces utilisateurs
   const userIds = users.map(u => u._id);
   
-  let adhesionFilter = { user: { $in: userIds } };
+  // Filtrer les adhésions : années >= N-1 (ex: si 2026, afficher 2025, 2026, 2027...)
+  const currentYear = new Date().getFullYear();
+  const minYear = currentYear - 1;
   
-  // Filtrer par organisme si spécifié (ou si admin non super_admin)
+  let adhesionFilter = { 
+    user: { $in: userIds },
+    annee: { $gte: minYear }
+  };
+  
+  // Filtrer par organisme uniquement si spécifié explicitement (pas par défaut)
   if (organisme) {
     adhesionFilter.organisme = organisme;
-  } else if (!isSuperAdmin && req.user.organisme) {
-    adhesionFilter.organisme = req.user.organisme;
   }
 
   const adhesions = await Adhesion.find(adhesionFilter)
@@ -78,10 +83,15 @@ const getUsers = asyncHandler(async (req, res) => {
     adhesions: adhesionsByUser[user._id.toString()] || [],
   }));
 
-  // Si admin non super_admin, filtrer les utilisateurs qui ont au moins une adhésion dans son organisme
+  // Si admin non super_admin, filtrer les utilisateurs qui ont au moins une adhésion dans ses organismes
   let filteredUsers = usersWithAdhesions;
-  if (!isSuperAdmin && req.user.organisme) {
-    filteredUsers = usersWithAdhesions.filter(u => u.adhesions.length > 0);
+  if (!isSuperAdmin) {
+    const adminOrganismes = req.user.organismes || (req.user.organisme ? [req.user.organisme] : []);
+    if (adminOrganismes.length > 0) {
+      filteredUsers = usersWithAdhesions.filter(u => 
+        u.adhesions.some(a => adminOrganismes.includes(a.organisme))
+      );
+    }
   }
 
   res.json(filteredUsers);
