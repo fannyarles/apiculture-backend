@@ -167,18 +167,6 @@ const generateUNAFExcel = async (annee, exportDate = new Date()) => {
   let montantTotal = 0;
   const isFirst = isFirstExportOfYear(exportDate, annee);
 
-  // Compteurs pour les quantités (AA15-AA24)
-  const counts = {
-    cotisationIndividuelle: 0,
-    revuePapier: 0,
-    revueNumerique: 0,
-    revuePapierNumerique: 0,
-    formule1: 0,
-    formule2: 0,
-    formule3: 0,
-    affairesJuridiques: 0,
-  };
-
   // Préparer les données pour Google Sheets
   const rowsData = [];
   
@@ -215,17 +203,7 @@ const generateUNAFExcel = async (annee, exportDate = new Date()) => {
 
     rowsData.push(rowData);
     montantTotal += payment.montant || 0;
-
-    // Compter les options
-    counts.cotisationIndividuelle++;
-    if (options.revue?.choix === 'papier') counts.revuePapier++;
-    if (options.revue?.choix === 'numerique') counts.revueNumerique++;
-    if (options.revue?.choix === 'papier_numerique') counts.revuePapierNumerique++;
-    if (options.assurance?.formule === 'formule1') counts.formule1++;
-    if (options.assurance?.formule === 'formule2') counts.formule2++;
-    if (options.assurance?.formule === 'formule3') counts.formule3++;
-    if (options.affairesJuridiques?.souscrit) counts.affairesJuridiques++;
-
+    
     // Tracker les éléments inclus
     if (payment.type === 'initial') {
       servicesInclus.push(payment.serviceId);
@@ -257,19 +235,6 @@ const generateUNAFExcel = async (annee, exportDate = new Date()) => {
         const dataRange = `${sheetName}!A3:U${3 + rowsData.length - 1}`;
         await updateCells(spreadsheetId, dataRange, rowsData);
       }
-
-      // 3. Remplir les quantités dans AA15-AA22
-      const countsUpdates = [
-        { range: `${sheetName}!AA15`, value: counts.cotisationIndividuelle },
-        { range: `${sheetName}!AA16`, value: counts.revuePapier },
-        { range: `${sheetName}!AA17`, value: counts.revueNumerique },
-        { range: `${sheetName}!AA18`, value: counts.revuePapierNumerique },
-        { range: `${sheetName}!AA19`, value: counts.formule1 },
-        { range: `${sheetName}!AA20`, value: counts.formule2 },
-        { range: `${sheetName}!AA21`, value: counts.formule3 },
-        { range: `${sheetName}!AA22`, value: counts.affairesJuridiques },
-      ];
-      await batchUpdateCells(spreadsheetId, countsUpdates);
     }
   );
 
