@@ -574,8 +574,10 @@ const generateBulletinAdhesionPDF = async (adhesion) => {
       let userY = doc.y;
       
       // Ligne 1 : Nom/Prénom | Date de naissance
-      const designation = infosPerso.designation || user.designation || '';
-      const nomComplet = isPersonneMorale ? `${typeLabels[typePersonne]} – ${infosPerso.raisonSociale || user.raisonSociale}` : `${designation} ${user.nom} ${user.prenom}`;
+      const designation = infosPerso.designation || user?.designation || '';
+      const nom = infosPerso.nom || user?.nom || '';
+      const prenom = infosPerso.prenom || user?.prenom || '';
+      const nomComplet = isPersonneMorale ? `${typeLabels[typePersonne]} – ${infosPerso.raisonSociale || user?.raisonSociale}` : `${designation} ${nom} ${prenom}`;
 
       doc.fontSize(labelSize).fillColor('#747474').font('Helvetica');
       doc.text("NOM", userTableLeft, userY);

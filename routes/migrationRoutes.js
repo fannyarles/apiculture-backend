@@ -7,6 +7,8 @@ const { protect, superAdmin } = require('../middleware/authMiddleware');
 const User = require('../models/userModel');
 const Adhesion = require('../models/adhesionModel');
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
+const sendEmail = require('../services/emailService');
 
 // Configuration multer pour stocker en mémoire
 const storage = multer.memoryStorage();
@@ -226,19 +228,24 @@ router.post('/import-adhesions', protect, superAdmin, asyncHandler(async (req, r
     details: []
   };
 
-  const defaultPassword = options.defaultPassword || 'Apiculture2024!';
   const skipExisting = options.skipExisting !== false;
   const createUsers = options.createUsers !== false;
+  const sendWelcomeEmail = options.sendWelcomeEmail !== false;
 
   for (const rowData of rows) {
     try {
       // Vérifier si l'email existe
       let user = await User.findOne({ email: rowData.email.toLowerCase() });
+      let userCreated = false;
+      let tempPassword = null;
       
       if (!user && createUsers) {
+        // Générer un mot de passe unique pour cet utilisateur
+        tempPassword = crypto.randomBytes(6).toString('hex'); // 12 caractères
+        
         // Créer l'utilisateur
         const salt = await bcrypt.genSalt(10);
-        const hashedPassword = await bcrypt.hash(defaultPassword, salt);
+        const hashedPassword = await bcrypt.hash(tempPassword, salt);
         
         user = await User.create({
           email: rowData.email.toLowerCase(),
@@ -258,11 +265,60 @@ router.post('/import-adhesions', protect, superAdmin, asyncHandler(async (req, r
           roles: ['user'],
         });
         
-        results.details.push({
-          row: rowData.rowNumber,
-          action: 'user_created',
-          email: user.email
-        });
+        userCreated = true;
+        
+        // Envoyer l'email de bienvenue avec les identifiants
+        if (sendWelcomeEmail) {
+          try {
+            await sendEmail({
+              to: user.email,
+              subject: 'Bienvenue sur la plateforme du Syndicat Apicole de La Réunion',
+              html: `
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                  <h2 style="color: #D97706;">Bienvenue ${user.prenom} ${user.nom} !</h2>
+                  <p>Votre compte a été créé sur la plateforme du <strong>Syndicat Apicole de La Réunion (SAR)</strong>.</p>
+                  <p><strong>Vos identifiants de connexion :</strong></p>
+                  <ul>
+                    <li>Email : <strong>${user.email}</strong></li>
+                    <li>Mot de passe : <strong>${tempPassword}</strong></li>
+                  </ul>
+                  <p>⚠️ Pour des raisons de sécurité, nous vous recommandons de changer votre mot de passe dès votre première connexion.</p>
+                  <p style="margin-top: 20px;">
+                    <a href="${process.env.FRONTEND_URL}/login" style="background-color: #D97706; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">
+                      Se connecter
+                    </a>
+                  </p>
+                  <hr style="margin: 30px 0; border: none; border-top: 1px solid #eee;">
+                  <p style="color: #666; font-size: 12px;">
+                    Syndicat Apicole de La Réunion - SAR
+                  </p>
+                </div>
+              `,
+            });
+            results.details.push({
+              row: rowData.rowNumber,
+              action: 'user_created',
+              email: user.email,
+              emailSent: true
+            });
+          } catch (emailError) {
+            console.error(`Erreur envoi email pour ${user.email}:`, emailError);
+            results.details.push({
+              row: rowData.rowNumber,
+              action: 'user_created',
+              email: user.email,
+              emailSent: false,
+              emailError: emailError.message
+            });
+          }
+        } else {
+          results.details.push({
+            row: rowData.rowNumber,
+            action: 'user_created',
+            email: user.email,
+            tempPassword: tempPassword // Retourner le mdp si pas d'email envoyé
+          });
+        }
       } else if (!user) {
         results.errors.push({
           row: rowData.rowNumber,
