@@ -185,7 +185,7 @@ const notifyAdminsServicePayment = async (service) => {
     }
 
     const userName = service.user ? `${service.user.prenom} ${service.user.nom}` : 'Utilisateur';
-    const serviceName = service.typeService === 'assurance_unaf' ? 'Services UNAF' : 'Miellerie AMAIR';
+    const serviceName = service.typeService === 'assurance_unaf' ? 'Services de l\'UNAF' : 'Miellerie AMAIR';
 
     const emailContent = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
