@@ -28,12 +28,12 @@ const adhesionSchema = mongoose.Schema(
     nombreRuches: {
       type: Number,
       required: false,
-      min: 1,
+      min: 0,
     },
     nombreRuchers: {
       type: Number,
       required: false,
-      min: 1,
+      min: 0,
     },
     localisation: {
       departement: {
