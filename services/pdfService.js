@@ -306,7 +306,7 @@ const generateAttestationPDF = async (adhesion) => {
       const attIsPersonneMorale = ['association', 'scea', 'etablissement_public'].includes(attTypePersonne);
       const attTypeLabels = { personne_physique: 'Personne physique', association: 'Association', scea: 'SCEA', etablissement_public: 'Établissement public' };
       const attDesignation = infosPerso.designation || user.designation || '';
-      const nomComplet = attDesignation ? `${attDesignation} ${nom} ${prenom}` : `${nom} ${prenom}`;
+      const nomComplet = attIsPersonneMorale ? `${attTypeLabels[attTypePersonne]} – ${infosPerso.raisonSociale || user.raisonSociale}` : `${attDesignation} ${nom} ${prenom}`;
       
       doc.text('Le présent document atteste que :', { align: 'left' });
       doc.moveDown(1);
@@ -328,22 +328,21 @@ const generateAttestationPDF = async (adhesion) => {
       let attY = doc.y;
       
       // Ligne 0 (si personne morale) : Type | Raison sociale
-      if (attIsPersonneMorale) {
-        doc.fontSize(attLabelSize).fillColor('#747474').font('Helvetica');
-        doc.text('TYPE', attTableLeft, attY);
-        doc.text('RAISON SOCIALE', attTableLeft + attColWidth, attY);
+      // if (attIsPersonneMorale) {
+      //   doc.fontSize(attLabelSize).fillColor('#747474').font('Helvetica');
+      //   doc.text('TYPE', attTableLeft, attY);
+      //   doc.text('RAISON SOCIALE', attTableLeft + attColWidth, attY);
         
-        doc.fontSize(attValueSize).fillColor('#000000');
-        doc.text(attTypeLabels[attTypePersonne] || attTypePersonne, attTableLeft, attY + 12);
-        doc.text(infosPerso.raisonSociale || user.raisonSociale || '-', attTableLeft + attColWidth, attY + 12);
+      //   doc.fontSize(attValueSize).fillColor('#000000');
+      //   doc.text(attTypeLabels[attTypePersonne] || attTypePersonne, attTableLeft, attY + 12);
+      //   doc.text(infosPerso.raisonSociale || user.raisonSociale || '-', attTableLeft + attColWidth, attY + 12);
         
-        attY += attRowHeight;
-      }
+      //   attY += attRowHeight;
+      // }
       
-      // Ligne 1 : Nom/Prénom
-      const attNomLabel = attIsPersonneMorale ? 'REPRÉSENTANT LÉGAL' : 'NOMS ET PRÉNOMS';
+      // Ligne 1 : Nom
       doc.fontSize(attLabelSize).fillColor('#747474').font('Helvetica');
-      doc.text(attNomLabel, attTableLeft, attY);
+      doc.text("NOM", attTableLeft, attY);
       
       doc.fontSize(attValueSize).fillColor('#000000').font('Helvetica-Bold');
       doc.text(nomComplet.toUpperCase(), attTableLeft, attY + 12);
@@ -588,12 +587,11 @@ const generateBulletinAdhesionPDF = async (adhesion) => {
       }
       
       // Ligne 1 : Nom/Prénom | Date de naissance
-      const nomLabel = isPersonneMorale ? 'REPRÉSENTANT LÉGAL' : 'NOMS ET PRÉNOMS';
       const designation = infosPerso.designation || user.designation || '';
-      const nomComplet = designation ? `${designation} ${user.nom} ${user.prenom}` : `${user.nom} ${user.prenom}`;
-      
+      const nomComplet = isPersonneMorale ? `${typeLabels[typePersonne]} – ${infosPerso.raisonSociale || user.raisonSociale}` : `${designation} ${user.nom} ${user.prenom}`;
+
       doc.fontSize(labelSize).fillColor('#747474').font('Helvetica');
-      doc.text(nomLabel, userTableLeft, userY);
+      doc.text("NOM", userTableLeft, userY);
       doc.text('DATE DE NAISSANCE', userTableLeft + colWidth, userY);
       
       doc.fontSize(valueSize).fillColor('#000000');
@@ -789,9 +787,9 @@ const generateBulletinAdhesionPDF = async (adhesion) => {
       doc.strokeColor('#000000').lineWidth(1);
       
       const orgLabel = adhesion.organisme === 'SAR' 
-        ? 'Syndicat Apicole de La Réunion (SAR)' 
-        : 'Association de la Maison de l\'Apiculture de La Réunion (AMAIR)';
-      doc.text(`Je demande l'adhésion au ${orgLabel}`, 70, checkboxY, { width: 450 });
+        ? 'au Syndicat Apicole de La Réunion (SAR)' 
+        : 'à l\'Association de la Maison de l\'Apiculture de La Réunion (AMAIR)';
+      doc.text(`Je demande l'adhésion ${orgLabel}.`, 70, checkboxY, { width: 450 });
       
       doc.moveDown(2);
 
@@ -1331,8 +1329,8 @@ const generateServiceAttestationPDF = async (service) => {
       const svcIsPersonneMorale = ['association', 'scea', 'etablissement_public'].includes(svcTypePersonne);
       const svcTypeLabels = { personne_physique: 'Personne physique', association: 'Association', scea: 'SCEA', etablissement_public: 'Établissement public' };
       const svcDesignation = infos.designation || user.designation || '';
-      const nomComplet = svcDesignation ? `${svcDesignation} ${user.nom} ${user.prenom}` : `${user.nom} ${user.prenom}`;
-      
+      const nomComplet = svcIsPersonneMorale ? `${svcTypeLabels[svcTypePersonne]} – ${infos.raisonSociale || user.raisonSociale}` : `${svcDesignation} ${user.nom} ${user.prenom}`;
+
       doc.text('Le présent document atteste que :', { align: 'left' });
       doc.moveDown(1);
 
@@ -1366,9 +1364,8 @@ const generateServiceAttestationPDF = async (service) => {
       }
       
       // Ligne 1 : Nom/Prénom
-      const svcNomLabel = svcIsPersonneMorale ? 'REPRÉSENTANT LÉGAL' : 'NOMS ET PRÉNOMS';
       doc.fontSize(svcLabelSize).fillColor('#747474').font('Helvetica');
-      doc.text(svcNomLabel, svcTableLeft, svcY);
+      doc.text("NOM", svcTableLeft, svcY);
       
       doc.fontSize(svcValueSize).fillColor('#000000').font('Helvetica-Bold');
       doc.text(nomComplet.toUpperCase(), svcTableLeft, svcY + 12);
@@ -1439,7 +1436,7 @@ const generateServiceAttestationPDF = async (service) => {
         doc.fontSize(10)
            .font('Helvetica-Oblique')
            .fillColor('#666666')
-           .text('Note : Le chèque de caution sera conservé et restitué en fin d\'année, sauf en cas de dégradation du matériel.', {
+           .text('Note : Le chèque de caution sera conservé et restitué en début d\'année suivante, sauf en cas de dégradation du matériel.', {
              align: 'left'
            });
         doc.moveDown(1);
