@@ -122,6 +122,35 @@ const getUnexportedPayments = async (annee) => {
   for (const service of servicesWithModifications) {
     service.historiqueModifications.forEach((modif, index) => {
       if (modif.paiement?.status === 'paye' && !modif.exportedToUNAF) {
+        // Pour les modifications, construire les options avec les NOUVELLES valeurs
+        // (celles que l'adhérent aura après validation)
+        const currentOptions = service.unafData?.options || {};
+        const mods = modif.modifications || {};
+        
+        // Construire les options en appliquant les modifications
+        const optionsApresModif = {
+          revue: {
+            ...currentOptions.revue,
+            choix: mods.revueApres || currentOptions.revue?.choix,
+          },
+          assurance: {
+            ...currentOptions.assurance,
+            formule: mods.formuleApres || currentOptions.assurance?.formule,
+          },
+          affairesJuridiques: {
+            ...currentOptions.affairesJuridiques,
+            souscrit: mods.affairesJuridiquesApres !== undefined 
+              ? mods.affairesJuridiquesApres 
+              : currentOptions.affairesJuridiques?.souscrit,
+          },
+          ecocontribution: {
+            ...currentOptions.ecocontribution,
+            souscrit: mods.ecocontributionApres !== undefined 
+              ? mods.ecocontributionApres 
+              : currentOptions.ecocontribution?.souscrit,
+          },
+        };
+        
         payments.push({
           type: 'modification',
           serviceId: service._id,
@@ -131,9 +160,10 @@ const getUnexportedPayments = async (annee) => {
           montant: modif.montantSupplementaire,
           datePaiement: modif.paiement.datePaiement,
           modifications: modif.modifications,
-          // Utiliser les options actuelles du service après modification
-          options: service.unafData?.options,
+          // Utiliser les options APRÈS modification pour l'export
+          options: optionsApresModif,
           informations: service.informationsPersonnelles,
+          unafData: service.unafData,
         });
       }
     });
@@ -143,80 +173,81 @@ const getUnexportedPayments = async (annee) => {
 };
 
 /**
- * Génère le fichier Excel pour l'export UNAF
+ * Génère le nom de fichier selon la nomenclature UNAF
  * @param {number} annee 
  * @param {Date} exportDate 
+ * @param {boolean} isComplement 
+ * @returns {string}
+ */
+const generateFileName = (annee, exportDate, isComplement = false) => {
+  const day = String(exportDate.getDate()).padStart(2, '0');
+  const month = String(exportDate.getMonth() + 1).padStart(2, '0');
+  const year = String(exportDate.getFullYear()).slice(-2);
+  const dateStr = `${day}${month}${year}`;
+  
+  const baseName = `SAR_Listingstructure${annee}_export_${dateStr}`;
+  return isComplement ? `${baseName}_complement.xlsx` : `${baseName}.xlsx`;
+};
+
+/**
+ * Prépare une ligne de données pour l'export Excel
+ * @param {Object} payment 
+ * @returns {Array}
+ */
+const prepareRowData = (payment) => {
+  const info = payment.informations || {};
+  const unafData = payment.unafData || {};
+  const options = payment.options || {};
+  const adresse = info.adresse || {};
+
+  return [
+    info.nom || payment.user?.nom || '',           // A: Nom
+    info.prenom || payment.user?.prenom || '',     // B: Prénom
+    (adresse.rue || '').trim(),                    // C: Rue
+    '',                                             // D: (vide ou autre)
+    (adresse.complement || '').trim(),             // E: Complément
+    (adresse.codePostal || '').trim(),             // F: Code postal
+    (adresse.ville || '').trim(),                  // G: Ville
+    (adresse.pays || 'France').trim(),             // H: Pays
+    info.email || payment.user?.email || '',       // I: Email
+    info.telephone || '',                          // J: Téléphone
+    info.telephoneMobile || '',                    // K: Téléphone mobile
+    unafData.siret || '',                          // L: SIRET
+    unafData.nombreRuches || '',                   // M: Nb ruches
+    1,                                              // N: Cotisation individuelle (toujours 1)
+    options.revue?.choix === 'papier' ? 1 : '',              // O: Revue papier
+    options.revue?.choix === 'numerique' ? 1 : '',           // P: Revue numérique
+    options.revue?.choix === 'papier_numerique' ? 1 : '',    // Q: Revue papier & numérique
+    options.assurance?.formule === 'formule1' ? 1 : '',      // R: Formule 1
+    options.assurance?.formule === 'formule2' ? 1 : '',      // S: Formule 2
+    options.assurance?.formule === 'formule3' ? 1 : '',      // T: Formule 3
+    options.affairesJuridiques?.souscrit ? 1 : '',           // U: Affaires juridiques
+  ];
+};
+
+/**
+ * Génère un fichier Excel pour un ensemble de paiements
+ * @param {Array} payments - Liste des paiements à inclure
+ * @param {number} annee 
+ * @param {Date} exportDate 
+ * @param {boolean} isComplement - True si c'est le fichier des modifications
  * @returns {Promise<Object>}
  */
-const generateUNAFExcel = async (annee, exportDate = new Date()) => {
-  // Vérifier que le template ID est configuré
+const generateSingleExcelFile = async (payments, annee, exportDate, isComplement = false) => {
   if (!GOOGLE_SHEETS_TEMPLATE_ID) {
     throw new Error('GOOGLE_SHEETS_TEMPLATE_ID n\'est pas configuré dans le .env');
   }
 
-  // Récupérer les paiements non exportés
-  const payments = await getUnexportedPayments(annee);
-
   if (payments.length === 0) {
-    return { success: false, message: 'Aucun nouveau paiement à exporter' };
+    return null;
   }
 
-  // Variables pour tracker les éléments inclus
-  const servicesInclus = [];
-  const modificationsIncluses = [];
-  let montantTotal = 0;
-  const isFirst = isFirstExportOfYear(exportDate, annee);
-
-  // Préparer les données pour Google Sheets
-  const rowsData = [];
-  
-  for (const payment of payments) {
-    const info = payment.informations || {};
-    const unafData = payment.unafData || {};
-    const options = payment.options || {};
-    const adresse = info.adresse || {};
-
-    // Préparer la ligne de données (colonnes A à U)
-    const rowData = [
-      info.nom || payment.user?.nom || '',           // A: Nom
-      info.prenom || payment.user?.prenom || '',     // B: Prénom
-      (adresse.rue || '').trim(),                    // C: Rue
-      '',                                             // D: (vide ou autre)
-      (adresse.complement || '').trim(),             // E: Complément
-      (adresse.codePostal || '').trim(),             // F: Code postal
-      (adresse.ville || '').trim(),                  // G: Ville
-      (adresse.pays || 'France').trim(),             // H: Pays
-      info.email || payment.user?.email || '',       // I: Email
-      info.telephone || '',                          // J: Téléphone
-      info.telephoneMobile || '',                    // K: Téléphone mobile
-      unafData.siret || '',                          // L: SIRET
-      unafData.nombreRuches || '',                   // M: Nb ruches
-      1,                                              // N: Cotisation individuelle (toujours 1)
-      options.revue?.choix === 'papier' ? 1 : '',              // O: Revue papier
-      options.revue?.choix === 'numerique' ? 1 : '',           // P: Revue numérique
-      options.revue?.choix === 'papier_numerique' ? 1 : '',    // Q: Revue papier & numérique
-      options.assurance?.formule === 'formule1' ? 1 : '',      // R: Formule 1
-      options.assurance?.formule === 'formule2' ? 1 : '',      // S: Formule 2
-      options.assurance?.formule === 'formule3' ? 1 : '',      // T: Formule 3
-      options.affairesJuridiques?.souscrit ? 1 : '',           // U: Affaires juridiques
-    ];
-
-    rowsData.push(rowData);
-    montantTotal += payment.montant || 0;
-    
-    // Tracker les éléments inclus
-    if (payment.type === 'initial') {
-      servicesInclus.push(payment.serviceId);
-    } else {
-      modificationsIncluses.push({
-        serviceId: payment.serviceId,
-        modificationIndex: payment.modificationIndex,
-      });
-    }
-  }
+  const isFirst = !isComplement && isFirstExportOfYear(exportDate, annee);
+  const rowsData = payments.map(prepareRowData);
+  const montantTotal = payments.reduce((sum, p) => sum + (p.montant || 0), 0);
 
   // Générer l'Excel via Google Sheets
-  const exportName = `UNAF_Export_${annee}_${exportDate.toISOString().split('T')[0]}`;
+  const exportName = `UNAF_Export_${annee}_${isComplement ? 'complement' : 'principal'}_${Date.now()}`;
   
   const buffer = await generateExcelFromTemplate(
     GOOGLE_SHEETS_TEMPLATE_ID,
@@ -238,14 +269,72 @@ const generateUNAFExcel = async (annee, exportDate = new Date()) => {
     }
   );
 
+  // Générer le nom de fichier selon la nomenclature
+  const fileName = generateFileName(annee, exportDate, isComplement);
+  
   // Upload vers S3
-  const fileName = `UNAF_Export_${annee}_${exportDate.toISOString().split('T')[0]}.xlsx`;
+  const s3Key = `unaf-exports/${fileName}`;
   const uploadResult = await uploadFile(
     buffer,
-    fileName,
-    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    'unaf-exports'
+    s3Key,
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
   );
+
+  return {
+    buffer,
+    fileName,
+    s3Key: uploadResult.key,
+    s3Url: uploadResult.url,
+    nombrePaiements: payments.length,
+    montantTotal,
+  };
+};
+
+/**
+ * Génère les fichiers Excel pour l'export UNAF (2 fichiers séparés)
+ * @param {number} annee 
+ * @param {Date} exportDate 
+ * @returns {Promise<Object>}
+ */
+const generateUNAFExcel = async (annee, exportDate = new Date()) => {
+  // Vérifier que le template ID est configuré
+  if (!GOOGLE_SHEETS_TEMPLATE_ID) {
+    throw new Error('GOOGLE_SHEETS_TEMPLATE_ID n\'est pas configuré dans le .env');
+  }
+
+  // Récupérer les paiements non exportés
+  const allPayments = await getUnexportedPayments(annee);
+
+  if (allPayments.length === 0) {
+    return { success: false, message: 'Aucun nouveau paiement à exporter' };
+  }
+
+  // Séparer les paiements initiaux et les modifications
+  const initialPayments = allPayments.filter(p => p.type === 'initial');
+  const modificationPayments = allPayments.filter(p => p.type === 'modification');
+
+  // Variables pour tracker les éléments inclus
+  const servicesInclus = initialPayments.map(p => p.serviceId);
+  const modificationsIncluses = modificationPayments.map(p => ({
+    serviceId: p.serviceId,
+    modificationIndex: p.modificationIndex,
+  }));
+
+  const isFirst = isFirstExportOfYear(exportDate, annee);
+  let fichierPrincipal = null;
+  let fichierComplement = null;
+
+  // Générer le fichier principal (nouvelles souscriptions)
+  if (initialPayments.length > 0) {
+    fichierPrincipal = await generateSingleExcelFile(initialPayments, annee, exportDate, false);
+    console.log(`✅ Fichier principal généré: ${fichierPrincipal.fileName} (${initialPayments.length} souscriptions)`);
+  }
+
+  // Générer le fichier complément (modifications)
+  if (modificationPayments.length > 0) {
+    fichierComplement = await generateSingleExcelFile(modificationPayments, annee, exportDate, true);
+    console.log(`✅ Fichier complément généré: ${fichierComplement.fileName} (${modificationPayments.length} modifications)`);
+  }
 
   // Marquer les paiements comme exportés
   const exportDateNow = new Date();
@@ -266,14 +355,33 @@ const generateUNAFExcel = async (annee, exportDate = new Date()) => {
     });
   }
 
+  // Calculer les totaux
+  const nombrePaiementsTotal = allPayments.length;
+  const montantTotal = allPayments.reduce((sum, p) => sum + (p.montant || 0), 0);
+
   // Créer l'enregistrement d'export
   const exportRecord = await UNAFExport.create({
     dateExport: exportDate,
     annee: annee,
     isFirstExport: isFirst,
-    s3Url: uploadResult.url,
-    s3Key: uploadResult.key,
-    nombrePaiements: payments.length,
+    fichierPrincipal: fichierPrincipal ? {
+      s3Url: fichierPrincipal.s3Url,
+      s3Key: fichierPrincipal.s3Key,
+      fileName: fichierPrincipal.fileName,
+      nombrePaiements: fichierPrincipal.nombrePaiements,
+      montantTotal: fichierPrincipal.montantTotal,
+    } : undefined,
+    fichierComplement: fichierComplement ? {
+      s3Url: fichierComplement.s3Url,
+      s3Key: fichierComplement.s3Key,
+      fileName: fichierComplement.fileName,
+      nombrePaiements: fichierComplement.nombrePaiements,
+      montantTotal: fichierComplement.montantTotal,
+    } : undefined,
+    // Compatibilité avec l'ancien format (utiliser le fichier principal par défaut)
+    s3Url: fichierPrincipal?.s3Url || fichierComplement?.s3Url,
+    s3Key: fichierPrincipal?.s3Key || fichierComplement?.s3Key,
+    nombrePaiements: nombrePaiementsTotal,
     montantTotal: montantTotal,
     servicesInclus: servicesInclus,
     modificationsIncluses: modificationsIncluses,
@@ -283,9 +391,12 @@ const generateUNAFExcel = async (annee, exportDate = new Date()) => {
   return {
     success: true,
     export: exportRecord,
-    nombrePaiements: payments.length,
+    nombrePaiements: nombrePaiementsTotal,
     montantTotal: montantTotal,
-    s3Url: uploadResult.url,
+    fichierPrincipal: fichierPrincipal,
+    fichierComplement: fichierComplement,
+    // Pour l'envoi d'email
+    fichiers: [fichierPrincipal, fichierComplement].filter(Boolean),
   };
 };
 
@@ -297,11 +408,27 @@ const generateUNAFExcel = async (annee, exportDate = new Date()) => {
 const getExportsByYear = async (annee) => {
   const exports = await UNAFExport.find({ annee }).sort({ dateExport: -1 });
   
-  // Régénérer les URLs signées
+  // Régénérer les URLs signées pour les deux fichiers
   for (const exp of exports) {
-    if (exp.s3Key) {
+    // Nouveau format avec deux fichiers
+    if (exp.fichierPrincipal?.s3Key) {
       try {
-        exp.s3Url = await getSignedUrl(exp.s3Key, 3600); // 1 heure
+        exp.fichierPrincipal.s3Url = await getSignedUrl(exp.fichierPrincipal.s3Key, 3600);
+      } catch (error) {
+        console.error('Erreur régénération URL fichier principal:', error);
+      }
+    }
+    if (exp.fichierComplement?.s3Key) {
+      try {
+        exp.fichierComplement.s3Url = await getSignedUrl(exp.fichierComplement.s3Key, 3600);
+      } catch (error) {
+        console.error('Erreur régénération URL fichier complément:', error);
+      }
+    }
+    // Ancien format (compatibilité)
+    if (exp.s3Key && !exp.fichierPrincipal?.s3Key) {
+      try {
+        exp.s3Url = await getSignedUrl(exp.s3Key, 3600);
       } catch (error) {
         console.error('Erreur régénération URL:', error);
       }

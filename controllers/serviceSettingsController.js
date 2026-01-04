@@ -94,7 +94,7 @@ const toggleService = asyncHandler(async (req, res) => {
 
   await settings.save();
 
-  const serviceName = service === 'miellerie' ? 'Miellerie' : 'Services UNAF';
+  const serviceName = service === 'miellerie' ? 'Miellerie' : 'Services de l\'UNAF';
   const isActive = service === 'miellerie' ? settings.miellerieActif : settings.unafActif;
 
   res.json({

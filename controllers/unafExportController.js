@@ -192,10 +192,6 @@ const sendExport = asyncHandler(async (req, res) => {
     throw new Error('Cet export a déjà été envoyé');
   }
 
-  // Télécharger le fichier Excel depuis S3
-  const fileBuffer = await downloadFile(exportRecord.s3Key);
-  const fileBase64 = fileBuffer.toString('base64');
-
   // Formater la date de l'export
   const dateExport = new Date(exportRecord.dateExport).toLocaleDateString('fr-FR', {
     day: 'numeric',
@@ -203,45 +199,83 @@ const sendExport = asyncHandler(async (req, res) => {
     year: 'numeric'
   });
 
+  // Préparer les pièces jointes (nouveau format avec 2 fichiers)
+  const piecesJointes = [];
+  let detailsFichiers = '';
+
+  // Fichier principal (nouvelles souscriptions)
+  if (exportRecord.fichierPrincipal?.s3Key) {
+    const buffer = await downloadFile(exportRecord.fichierPrincipal.s3Key);
+    piecesJointes.push({
+      content: buffer.toString('base64'),
+      name: exportRecord.fichierPrincipal.fileName || `SAR_Listingstructure${exportRecord.annee}_export.xlsx`
+    });
+    detailsFichiers += `
+      <li><strong>Nouvelles souscriptions :</strong> ${exportRecord.fichierPrincipal.nombrePaiements} adhérent(s) - ${(exportRecord.fichierPrincipal.montantTotal || 0).toFixed(2)} €</li>
+    `;
+  }
+
+  // Fichier complément (modifications)
+  if (exportRecord.fichierComplement?.s3Key) {
+    const buffer = await downloadFile(exportRecord.fichierComplement.s3Key);
+    piecesJointes.push({
+      content: buffer.toString('base64'),
+      name: exportRecord.fichierComplement.fileName || `SAR_Listingstructure${exportRecord.annee}_export_complement.xlsx`
+    });
+    detailsFichiers += `
+      <li><strong>Modifications :</strong> ${exportRecord.fichierComplement.nombrePaiements} modification(s) - ${(exportRecord.fichierComplement.montantTotal || 0).toFixed(2)} €</li>
+    `;
+  }
+
+  // Ancien format (compatibilité)
+  if (piecesJointes.length === 0 && exportRecord.s3Key) {
+    const buffer = await downloadFile(exportRecord.s3Key);
+    piecesJointes.push({
+      content: buffer.toString('base64'),
+      name: `UNAF_Export_${exportRecord.annee}_${exportRecord.dateExport.toISOString().split('T')[0]}.xlsx`
+    });
+    detailsFichiers = `<li>Nombre de paiements : ${exportRecord.nombrePaiements}</li>`;
+  }
+
+  if (piecesJointes.length === 0) {
+    res.status(400);
+    throw new Error('Aucun fichier à envoyer pour cet export');
+  }
+
   // Préparer le contenu de l'email
   const sujet = `Export UNAF du ${dateExport}`;
   const contenuHtml = `
     <div style="font-family: Arial, sans-serif; padding: 20px;">
       <h2 style="color: #1f2937;">Export UNAF - SAR</h2>
       <p>Bonjour,</p>
-      <p>Veuillez trouver ci-joint l'export des adhésions UNAF du <strong>${dateExport}</strong>.</p>
+      <p>Veuillez trouver ci-joint ${piecesJointes.length > 1 ? 'les fichiers d\'export' : 'le fichier d\'export'} des adhésions UNAF du <strong>${dateExport}</strong>.</p>
       <p><strong>Détails de l'export :</strong></p>
       <ul>
-        <li>Nombre de paiements : ${exportRecord.nombrePaiements}</li>
-        <li>Montant total : ${exportRecord.montantTotal.toFixed(2)} €</li>
+        ${detailsFichiers}
+        <li><strong>Total général :</strong> ${exportRecord.nombrePaiements} paiement(s) - ${exportRecord.montantTotal.toFixed(2)} €</li>
         <li>Premier export de l'année : ${exportRecord.isFirstExport ? 'Oui' : 'Non'}</li>
       </ul>
+      ${piecesJointes.length > 1 ? '<p><em>Note : Vous trouverez 2 fichiers en pièce jointe - un pour les nouvelles souscriptions et un pour les modifications (complément).</em></p>' : ''}
       <p>Cordialement,<br>SAR - Syndicat Apicole de la Réunion</p>
     </div>
   `;
 
-  // Nom du fichier
-  const fileName = `UNAF_Export_${exportRecord.annee}_${exportRecord.dateExport.toISOString().split('T')[0]}.xlsx`;
-
-  // Envoyer l'email avec pièce jointe
+  // Envoyer l'email avec les pièces jointes
   await envoyerEmailAvecPieceJointe(
     UNAF_EMAIL,
     sujet,
     contenuHtml,
-    {
-      content: fileBase64,
-      name: fileName
-    }
+    piecesJointes
   );
 
   // Mettre à jour le statut
   exportRecord.status = 'envoye';
-  exportRecord.notes = `Envoyé par email le ${new Date().toLocaleDateString('fr-FR')} à ${UNAF_EMAIL}`;
+  exportRecord.notes = `Envoyé par email le ${new Date().toLocaleDateString('fr-FR')} à ${UNAF_EMAIL} (${piecesJointes.length} fichier(s))`;
   exportRecord.dateEnvoi = new Date();
   await exportRecord.save();
 
   res.json({
-    message: `Export envoyé avec succès à ${UNAF_EMAIL}`,
+    message: `Export envoyé avec succès à ${UNAF_EMAIL} (${piecesJointes.length} fichier(s))`,
     export: exportRecord,
   });
 });
@@ -303,19 +337,73 @@ const activateExport = asyncHandler(async (req, res) => {
     }
   }
 
-  // Marquer les modifications comme exportées/traitées
+  // Valider et appliquer les modifications
   for (const modif of exportRecord.modificationsIncluses) {
     try {
-      const service = await Service.findById(modif.serviceId);
+      const service = await Service.findById(modif.serviceId).populate('user', 'prenom nom email');
       
       if (service && service.historiqueModifications[modif.modificationIndex]) {
-        // Les modifications n'ont pas de status séparé, mais on peut
-        // vérifier que le service parent est actif
-        if (service.status === 'en_attente_validation') {
-          service.status = 'actif';
-          service.dateValidation = new Date();
+        const historiqueEntry = service.historiqueModifications[modif.modificationIndex];
+        
+        // Vérifier que la modification est payée et pas encore validée
+        if (historiqueEntry.paiement?.status === 'paye' && !historiqueEntry.validated) {
+          const mods = historiqueEntry.modifications;
+          const nombreRuches = service.unafData?.nombreRuches || 0;
+          
+          // Tarifs pour recalcul
+          const TARIFS = {
+            affairesJuridiques: 0.15,
+            ecocontribution: 0.12,
+            assurance: { formule1: 0.10, formule2: 1.65, formule3: 2.80 },
+          };
+          
+          // Appliquer les modifications au service
+          if (mods.formuleApres && mods.formuleApres !== mods.formuleAvant) {
+            service.unafData.options.assurance.formule = mods.formuleApres;
+            service.unafData.options.assurance.prixParRuche = TARIFS.assurance[mods.formuleApres];
+            service.unafData.options.assurance.montant = TARIFS.assurance[mods.formuleApres] * nombreRuches;
+            service.unafData.detailMontants.assurance = TARIFS.assurance[mods.formuleApres] * nombreRuches;
+          }
+          if (mods.affairesJuridiquesApres !== undefined && mods.affairesJuridiquesApres !== mods.affairesJuridiquesAvant) {
+            service.unafData.options.affairesJuridiques.souscrit = mods.affairesJuridiquesApres;
+            service.unafData.options.affairesJuridiques.montant = mods.affairesJuridiquesApres ? TARIFS.affairesJuridiques * nombreRuches : 0;
+            service.unafData.detailMontants.affairesJuridiques = mods.affairesJuridiquesApres ? TARIFS.affairesJuridiques * nombreRuches : 0;
+          }
+          if (mods.ecocontributionApres !== undefined && mods.ecocontributionApres !== mods.ecocontributionAvant) {
+            service.unafData.options.ecocontribution.souscrit = mods.ecocontributionApres;
+            service.unafData.options.ecocontribution.montant = mods.ecocontributionApres ? TARIFS.ecocontribution * nombreRuches : 0;
+            service.unafData.detailMontants.ecocontribution = mods.ecocontributionApres ? TARIFS.ecocontribution * nombreRuches : 0;
+          }
+          
+          // Recalculer le total
+          const dm = service.unafData.detailMontants;
+          const newTotal = (dm.cotisationUNAF || 0) + (dm.affairesJuridiques || 0) + 
+                          (dm.ecocontribution || 0) + (dm.revue || 0) + (dm.assurance || 0);
+          service.unafData.detailMontants.total = Math.round(newTotal * 100) / 100;
+          
+          // Marquer la modification comme validée
+          historiqueEntry.validated = true;
+          historiqueEntry.dateValidation = new Date();
+          
+          // Régénérer l'attestation avec les nouvelles valeurs
+          try {
+            const attestationResult = await generateAndUploadServiceAttestation(service);
+            service.attestationKey = attestationResult.key;
+            service.attestationUrl = attestationResult.url;
+            
+            // Si écocontribution souscrite, générer aussi cette attestation
+            if (service.unafData?.options?.ecocontribution?.souscrit) {
+              const ecoResult = await generateAndUploadEcocontributionAttestation(service);
+              service.ecocontributionAttestationKey = ecoResult.key;
+              service.ecocontributionAttestationUrl = ecoResult.url;
+            }
+          } catch (attestationError) {
+            console.error(`Erreur régénération attestation après modification ${modif.serviceId}:`, attestationError);
+          }
+          
           await service.save();
           activatedCount++;
+          console.log(`✅ Modification ${modif.modificationIndex} du service ${modif.serviceId} validée et appliquée`);
         }
       }
     } catch (error) {

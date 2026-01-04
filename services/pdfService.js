@@ -977,7 +977,11 @@ const generateUNAFAttestationPDF = async (service) => {
       doc.moveDown(0.5);
       
       // Informations de l'adhérent
-      const nomComplet = `${user.nom || infos.nom || ''} ${user.prenom || infos.prenom || ''}`.trim();
+      const typePersonne = infos.typePersonne || user.typePersonne || 'personne_physique';
+      const isPersonneMorale = ['association', 'scea', 'etablissement_public'].includes(typePersonne);
+      const typeLabels = { personne_physique: 'Personne physique', association: 'Association', scea: 'SCEA', etablissement_public: 'Établissement public' };
+      const designation = infos.designation || user.designation || '';
+      const nomComplet = isPersonneMorale ? `${typeLabels[typePersonne]} – ${infos.raisonSociale || user.raisonSociale}` : `${designation} ${user.nom || infos.nom || ''} ${user.prenom || infos.prenom || ''}`.trim();
       const adresse = infos.adresse || user.adresse;
       let adresseComplete = '-';
       if (adresse?.rue) {
@@ -1152,7 +1156,11 @@ const generateEcocontributionAttestationPDF = async (service) => {
       doc.moveDown(0.5);
       
       // Informations de l'adhérent
-      const nomComplet = `${user.nom || infos.nom || ''} ${user.prenom || infos.prenom || ''}`.trim();
+      const typePersonne = infos.typePersonne || user.typePersonne || 'personne_physique';
+      const isPersonneMorale = ['association', 'scea', 'etablissement_public'].includes(typePersonne);
+      const typeLabels = { personne_physique: 'Personne physique', association: 'Association', scea: 'SCEA', etablissement_public: 'Établissement public' };
+      const designation = infos.designation || user.designation || '';
+      const nomComplet = isPersonneMorale ? `${typeLabels[typePersonne]} – ${infos.raisonSociale || user.raisonSociale}` : `${designation} ${user.nom || infos.nom || ''} ${user.prenom || infos.prenom || ''}`.trim();
       const siret = unafData.siret || '-';
       const adresse = infos.adresse || user.adresse;
       let adresseComplete = '-';

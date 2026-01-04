@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const multer = require('multer');
 const {
   createService,
   getMyServices,
@@ -18,6 +19,21 @@ const {
 } = require('../controllers/serviceController');
 const { protect, admin } = require('../middleware/authMiddleware');
 
+// Configuration multer pour upload de documents caution
+const storage = multer.memoryStorage();
+const upload = multer({
+  storage,
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB max
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'];
+    if (allowedTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Type de fichier non autorisé. Utilisez PDF, JPG ou PNG.'), false);
+    }
+  },
+});
+
 // Routes publiques
 router.get('/amair-address', getAMAIRAddress);
 
@@ -34,7 +50,7 @@ router.post('/:serviceId/confirm-modification', protect, confirmUNAFModification
 router.get('/', protect, admin, getAllServices);
 router.get('/admin/miellerie-status', protect, admin, getMiellerieStatusByAdhesion);
 router.get('/admin/services-status', protect, admin, getServicesStatusByAdhesion);
-router.put('/:id/caution', protect, admin, updateCautionStatus);
+router.put('/:id/caution', protect, admin, upload.single('documentCaution'), updateCautionStatus);
 
 // Routes avec paramètres - DOIVENT être après les routes spécifiques
 router.get('/:id/attestation/:type', protect, downloadServiceAttestation);

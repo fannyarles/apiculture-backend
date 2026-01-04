@@ -294,7 +294,8 @@ const envoyerEmailBienvenueAdmin = async (admin, passwordClair) => {
   }
 };
 
-// Envoyer un email avec pièce jointe (pour export UNAF)
+// Envoyer un email avec pièce(s) jointe(s) (pour export UNAF)
+// pieceJointe peut être un objet unique ou un tableau d'objets {content, name}
 const envoyerEmailAvecPieceJointe = async (destinataire, sujet, contenuHtml, pieceJointe) => {
   try {
     const emailFrom = process.env.EMAIL_FROM_SAR;
@@ -314,14 +315,14 @@ const envoyerEmailAvecPieceJointe = async (destinataire, sujet, contenuHtml, pie
       htmlContent: contenuHtml
     };
 
-    // Ajouter la pièce jointe si présente
+    // Ajouter la/les pièce(s) jointe(s) si présente(s)
     if (pieceJointe) {
-      payload.attachment = [
-        {
-          content: pieceJointe.content, // Base64 encoded
-          name: pieceJointe.name
-        }
-      ];
+      // Support pour tableau de pièces jointes ou pièce unique
+      const piecesJointes = Array.isArray(pieceJointe) ? pieceJointe : [pieceJointe];
+      payload.attachment = piecesJointes.map(pj => ({
+        content: pj.content, // Base64 encoded
+        name: pj.name
+      }));
     }
 
     const response = await axios.post(

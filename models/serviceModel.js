@@ -84,6 +84,12 @@ const serviceSchema = mongoose.Schema(
       note: {
         type: String,
       },
+      documentPreuve: {
+        key: String,
+        url: String,
+        nom: String,
+        dateUpload: Date,
+      },
     },
     // Statut global du service
     status: {
@@ -149,6 +155,7 @@ const serviceSchema = mongoose.Schema(
     // Données spécifiques aux services  de l'UNAF
     unafData: {
       siret: String,
+      napi: String,
       nombreEmplacements: Number,
       nombreRuches: Number,
       // Options sélectionnées
@@ -230,6 +237,14 @@ const serviceSchema = mongoose.Schema(
       },
       signature: String,
       signatureDate: Date,
+      // Validation admin (même workflow que souscriptions initiales)
+      validated: {
+        type: Boolean,
+        default: false,
+      },
+      dateValidation: {
+        type: Date,
+      },
       // Tracking pour export UNAF
       exportedToUNAF: {
         type: Boolean,

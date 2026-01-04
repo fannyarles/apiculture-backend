@@ -285,4 +285,31 @@ router.get('/download/:s3Key(*)', protect, asyncHandler(async (req, res) => {
   }
 }));
 
+// @desc    Obtenir une URL signée pour visualiser un fichier par sa clé S3
+// @route   GET /api/files/signed-url/:key
+// @access  Private
+router.get('/signed-url/:key(*)', protect, asyncHandler(async (req, res) => {
+  // Décoder la clé URL-encodée (les / sont encodés en %2F)
+  const key = decodeURIComponent(req.params.key);
+
+  if (!key) {
+    res.status(400);
+    throw new Error('Clé du fichier requise');
+  }
+
+  try {
+    // Générer une URL signée valide 1 heure
+    const signedUrl = await s3Service.getSignedUrl(key, 3600);
+
+    res.json({
+      url: signedUrl,
+      expiresIn: 3600
+    });
+  } catch (error) {
+    console.error('Erreur génération URL signée:', error);
+    res.status(500);
+    throw new Error('Erreur lors de la génération du lien');
+  }
+}));
+
 module.exports = router;

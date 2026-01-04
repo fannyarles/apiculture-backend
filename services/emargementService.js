@@ -88,7 +88,7 @@ const generateEmargementPDF = async (reunion) => {
     // En-tête avec titre (à droite du logo)
     const organismeNom = reunion.organisme === 'SAR' 
       ? 'SYNDICAT APICOLE DE LA RÉUNION'
-      : 'ASSOCIATION MAISON DE L\'APICULTURE DE LA RÉUNION';
+      : 'ASSOCIATION DE LA MAISON DE L\'APICULTURE DE LA RÉUNION';
     
     doc.fontSize(12)
        .font('Helvetica-Bold')

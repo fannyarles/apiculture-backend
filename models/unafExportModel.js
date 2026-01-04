@@ -17,22 +17,33 @@ const unafExportSchema = mongoose.Schema(
       type: Boolean,
       default: false,
     },
-    // URL du fichier sur S3
+    // Fichier principal (nouvelles souscriptions)
+    fichierPrincipal: {
+      s3Url: String,
+      s3Key: String,
+      fileName: String,
+      nombrePaiements: { type: Number, default: 0 },
+      montantTotal: { type: Number, default: 0 },
+    },
+    // Fichier complémentaire (modifications)
+    fichierComplement: {
+      s3Url: String,
+      s3Key: String,
+      fileName: String,
+      nombrePaiements: { type: Number, default: 0 },
+      montantTotal: { type: Number, default: 0 },
+    },
+    // DEPRECATED - Garder pour compatibilité avec anciens exports
     s3Url: {
       type: String,
-      required: true,
     },
-    // Clé S3 pour suppression éventuelle
     s3Key: {
       type: String,
-      required: true,
     },
-    // Nombre de paiements inclus dans cet export
     nombrePaiements: {
       type: Number,
       default: 0,
     },
-    // Montant total des paiements
     montantTotal: {
       type: Number,
       default: 0,

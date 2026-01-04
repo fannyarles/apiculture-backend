@@ -3,6 +3,7 @@ const Service = require('../models/serviceModel');
 const Adhesion = require('../models/adhesionModel');
 const Organisme = require('../models/organismeModel');
 const Permission = require('../models/permissionModel');
+const { uploadFile, getSignedUrl } = require('../services/s3Service');
 
 // @desc    Créer une souscription à un service
 // @route   POST /api/services
@@ -70,7 +71,7 @@ const createService = asyncHandler(async (req, res) => {
     montant = 25; // Droit d'usage
     montantCaution = 300; // Caution
   } else if (typeService === 'assurance_unaf') {
-    nom = 'Services UNAF';
+    nom = 'Services de l\'UNAF';
     
     // Récupérer les données UNAF depuis la requête
     const { unafOptions } = req.body;
@@ -130,6 +131,7 @@ const createService = asyncHandler(async (req, res) => {
 
     unafData = {
       siret: unafOptions.siret || adhesion.siret,
+      napi: unafOptions.napi || '',
       nombreEmplacements: unafOptions.nombreEmplacements || adhesion.nombreRuchers,
       nombreRuches: nombreRuches,
       options: optionsData,
@@ -323,6 +325,30 @@ const updateCautionStatus = asyncHandler(async (req, res) => {
 
   if (note !== undefined) {
     service.caution.note = note;
+  }
+
+  // Gérer l'upload du document de preuve de caution
+  if (req.file && status === 'recu') {
+    try {
+      const fileExtension = req.file.originalname.split('.').pop();
+      const timestamp = Date.now();
+      const fileName = `${timestamp}-preuve_caution_${service._id}.${fileExtension}`;
+      const s3Key = `cautions/${fileName}`;
+      
+      await uploadFile(req.file.buffer, s3Key, req.file.mimetype);
+      const signedUrl = await getSignedUrl(s3Key);
+      
+      service.caution.documentPreuve = {
+        key: s3Key,
+        url: signedUrl,
+        nom: req.file.originalname,
+        dateUpload: new Date(),
+      };
+      
+      console.log(`✅ Document preuve caution uploadé: ${s3Key}`);
+    } catch (uploadError) {
+      console.error('Erreur upload document caution:', uploadError);
+    }
   }
 
   // Mettre à jour le statut global du service

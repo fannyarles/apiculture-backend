@@ -478,7 +478,7 @@ const handleStripeWebhook = asyncHandler(async (req, res) => {
                   <div style="background-color: #FEF3C7; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #F59E0B;">
                     <h3 style="color: #92400E; margin-top: 0;">⚠️ Chèque de caution requis</h3>
                     <p style="color: #78350F; margin-bottom: 0;">
-                      Pour finaliser votre inscription, n'oubliez pas d'envoyer votre chèque de caution de ${service.caution?.montant || 300} € 
+                      Pour finaliser votre inscription, n'oubliez pas de transmettre votre chèque de caution de ${service.caution?.montant || 300} € 
                       à l'ordre de l'AMAIR. Votre accès sera activé dès réception du chèque.
                     </p>
                   </div>
@@ -548,35 +548,16 @@ const handleStripeWebhook = asyncHandler(async (req, res) => {
               console.error('Erreur sauvegarde reçu modification:', receiptError.message);
             }
             
-            // Appliquer les modifications au service
-            if (historiqueEntry.modifications.assuranceFormule) {
-              service.unafData.options.assurance = {
-                ...service.unafData.options.assurance,
-                formule: historiqueEntry.modifications.assuranceFormule,
-              };
-            }
-            if (historiqueEntry.modifications.nombreRuches !== undefined) {
-              service.unafData.nombreRuches = historiqueEntry.modifications.nombreRuches;
-            }
-            if (historiqueEntry.modifications.affairesJuridiques !== undefined) {
-              service.unafData.options.affairesJuridiques = {
-                ...service.unafData.options.affairesJuridiques,
-                souscrit: historiqueEntry.modifications.affairesJuridiques,
-              };
-            }
-            if (historiqueEntry.modifications.ecocontribution !== undefined) {
-              service.unafData.options.ecocontribution = {
-                ...service.unafData.options.ecocontribution,
-                souscrit: historiqueEntry.modifications.ecocontribution,
-              };
-            }
+            // NE PAS appliquer les modifications immédiatement
+            // Elles seront appliquées lors de la validation admin (même workflow que souscriptions initiales)
+            // La modification reste en attente de validation (validated: false par défaut)
 
             await service.save();
 
-            // Envoyer email de confirmation
+            // Envoyer email de confirmation de paiement (modification en attente de validation)
             const emailContent = `
               <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                <h2 style="color: #16a34a;">✅ Modification confirmée - Services de l'UNAF</h2>
+                <h2 style="color: #16a34a;">✅ Paiement reçu - Modification Services de l'UNAF</h2>
                 
                 <p>Bonjour ${service.user.prenom} ${service.user.nom},</p>
                 
@@ -588,7 +569,12 @@ const handleStripeWebhook = asyncHandler(async (req, res) => {
                   <p style="margin: 5px 0;"><strong>Date de paiement :</strong> ${new Date().toLocaleDateString('fr-FR')}</p>
                 </div>
                 
-                <p>Votre modification a été appliquée avec succès.</p>
+                <div style="background-color: #FEF3C7; padding: 15px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #F59E0B;">
+                  <p style="margin: 0; color: #92400E;">
+                    <strong>⏳ En attente de validation</strong><br>
+                    Votre modification sera validée lors du prochain export vers l'UNAF. Vous recevrez une confirmation une fois la validation effectuée.
+                  </p>
+                </div>
                 
                 <hr style="border: none; border-top: 1px solid #E5E7EB; margin: 30px 0;">
                 
@@ -602,11 +588,11 @@ const handleStripeWebhook = asyncHandler(async (req, res) => {
             await transporter.sendMail({
               from: `"${process.env.PLATFORM_NAME}" ${process.env.SMTP_FROM_EMAIL}`,
               to: service.user.email,
-              subject: `Confirmation de modification - Services UNAF ${service.annee}`,
+              subject: `Paiement reçu - Modification Services de l'UNAF ${service.annee}`,
               html: emailContent,
             });
 
-            console.log(`✅ Paiement modification confirmé pour le service ${service._id}, modification index ${historiqueEntryIndex}`);
+            console.log(`✅ Paiement modification reçu pour le service ${service._id}, modification index ${historiqueEntryIndex} (en attente de validation)`);
           }
         }
         
@@ -1477,7 +1463,7 @@ const createUNAFModificationPaymentSession = asyncHandler(async (req, res) => {
           price_data: {
             currency: 'eur',
             product_data: {
-              name: `Modification services UNAF - ${service.annee}`,
+              name: `Modification services de l'UNAF - ${service.annee}`,
               description: `Supplément pour modification de votre souscription UNAF`,
             },
             unit_amount: Math.round(montant * 100),
