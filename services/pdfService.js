@@ -423,6 +423,23 @@ const generateAttestationPDF = async (adhesion) => {
       doc.font('Helvetica')
          .text('Signature du Président :', { align: 'left' });
 
+      doc.moveDown(0.5);
+      
+      // Signature du président SAR depuis S3 ou local
+      if (adhesion.organisme === 'SAR') {
+        try {
+          const signatureBuffer = await downloadFile('signatures/SAR_signature_PF.png');
+          doc.image(signatureBuffer, 50, doc.y, { width: 150 });
+        } catch (err) {
+          console.warn('Signature SAR non trouvée sur S3:', err.message);
+          // Fallback : essayer la signature locale
+          const localSignaturePath = path.join(__dirname, '../uploads/signatures/SAR_signature_PF.png');
+          if (fs.existsSync(localSignaturePath)) {
+            doc.image(localSignaturePath, 50, doc.y, { width: 150 });
+          }
+        }
+      }
+
       // Pied de page
       doc.fontSize(8)
          .font('Helvetica-Oblique')
