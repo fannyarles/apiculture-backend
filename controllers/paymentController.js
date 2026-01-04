@@ -48,7 +48,7 @@ const markPaymentAsPaid = asyncHandler(async (req, res) => {
     throw new Error('La date de paiement est requise');
   }
 
-  const adhesion = await Adhesion.findById(adhesionId).populate('user', 'prenom nom email');
+  const adhesion = await Adhesion.findById(adhesionId).populate('user', 'prenom nom email telephoneMobile telephone adresse dateNaissance');
 
   if (!adhesion) {
     res.status(404);
@@ -616,7 +616,7 @@ const handleStripeWebhook = asyncHandler(async (req, res) => {
       // Traitement du paiement d'adhésion (code existant)
       const adhesion = await Adhesion.findById(session.metadata.adhesionId).populate(
         'user',
-        'prenom nom email'
+        'prenom nom email telephoneMobile telephone adresse dateNaissance'
       );
 
       if (adhesion) {

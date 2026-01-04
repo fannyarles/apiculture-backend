@@ -332,7 +332,7 @@ const createAdhesion = asyncHandler(async (req, res) => {
 
   const populatedAdhesion = await Adhesion.findById(adhesion._id).populate(
     'user',
-    'prenom nom email telephone adresse dateNaissance'
+    'prenom nom email telephoneMobile telephone adresse dateNaissance'
   );
 
   // Synchroniser les informations personnelles avec le profil utilisateur

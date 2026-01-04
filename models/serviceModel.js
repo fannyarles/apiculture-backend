@@ -176,7 +176,7 @@ const serviceSchema = mongoose.Schema(
         assurance: {
           formule: {
             type: String,
-            enum: ['formule1', 'formule2', 'formule3'],
+            enum: ['aucune', 'formule1', 'formule2', 'formule3'],
           },
           prixParRuche: Number,
           montant: Number,
