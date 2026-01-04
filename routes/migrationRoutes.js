@@ -243,6 +243,8 @@ router.post('/import-adhesions', protect, superAdmin, asyncHandler(async (req, r
         
         // Générer un token d'invitation pour définir le mot de passe
         const inviteToken = crypto.randomBytes(32).toString('hex');
+        // Hasher le token pour le stockage (comme dans forgotPassword)
+        const hashedToken = crypto.createHash('sha256').update(inviteToken).digest('hex');
         const inviteTokenExpire = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 jours
         
         // Créer l'utilisateur
@@ -262,7 +264,7 @@ router.post('/import-adhesions', protect, superAdmin, asyncHandler(async (req, r
           },
           role: 'user',
           roles: ['user'],
-          resetPasswordToken: inviteToken,
+          resetPasswordToken: hashedToken,
           resetPasswordExpire: inviteTokenExpire,
         });
         
