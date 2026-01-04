@@ -367,7 +367,7 @@ const updateCautionStatus = asyncHandler(async (req, res) => {
     try {
       const { generateAndUploadServiceAttestation, generateAndUploadEcocontributionAttestation } = require('../services/pdfService');
       const populatedService = await Service.findById(service._id)
-        .populate('user', 'prenom nom email telephone adresse');
+        .populate('user', 'type prenom nom email telephoneMobile telephone adresse designation raisonSociale');
       const attestationResult = await generateAndUploadServiceAttestation(populatedService);
       service.attestationKey = attestationResult.key;
       service.attestationUrl = attestationResult.url;

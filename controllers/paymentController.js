@@ -350,7 +350,7 @@ const handleStripeWebhook = asyncHandler(async (req, res) => {
         // Traitement du paiement de service
         const service = await Service.findById(session.metadata.serviceId).populate(
           'user',
-          'prenom nom email'
+          'type prenom nom email adresse telephoneMobile telephone designation raisonSociale'
         );
 
         if (service) {
@@ -1156,7 +1156,7 @@ const markServicePaymentAsPaid = asyncHandler(async (req, res) => {
     throw new Error('La date de paiement est requise');
   }
 
-  const service = await Service.findById(serviceId).populate('user', 'prenom nom email');
+  const service = await Service.findById(serviceId).populate('user', 'type prenom nom email adresse telephoneMobile telephone designation raisonSociale');
 
   if (!service) {
     res.status(404);
