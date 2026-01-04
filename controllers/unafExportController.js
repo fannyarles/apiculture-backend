@@ -305,7 +305,7 @@ const activateExport = asyncHandler(async (req, res) => {
   // Activer les services inclus (paiements initiaux)
   for (const serviceId of exportRecord.servicesInclus) {
     try {
-      const service = await Service.findById(serviceId).populate('user', 'prenom nom email');
+      const service = await Service.findById(serviceId).populate('user', 'prenom nom email telephone telephoneMobile adresse dateNaissance designation');
       
       if (service && service.status === 'en_attente_validation') {
         service.status = 'actif';
@@ -340,7 +340,7 @@ const activateExport = asyncHandler(async (req, res) => {
   // Valider et appliquer les modifications
   for (const modif of exportRecord.modificationsIncluses) {
     try {
-      const service = await Service.findById(modif.serviceId).populate('user', 'prenom nom email');
+      const service = await Service.findById(modif.serviceId).populate('user', 'prenom nom email telephone telephoneMobile adresse dateNaissance designation');
       
       if (service && service.historiqueModifications[modif.modificationIndex]) {
         const historiqueEntry = service.historiqueModifications[modif.modificationIndex];
