@@ -433,11 +433,49 @@ const envoyerConvocation = async (destinataires, convocation, organisme, pdfAtta
   };
 };
 
-module.exports = {
-  envoyerEmail,
-  envoyerCommunication,
-  getEmailTemplate,
-  envoyerEmailBienvenueAdmin,
-  envoyerEmailAvecPieceJointe,
-  envoyerConvocation
+// Fonction générique pour envoyer un email simple (to, subject, html)
+const sendEmail = async ({ to, subject, html }) => {
+  try {
+    const emailFrom = process.env.EMAIL_FROM_SAR || process.env.EMAIL_FROM_AMAIR;
+
+    const response = await axios.post(
+      'https://api.brevo.com/v3/smtp/email',
+      {
+        sender: {
+          email: emailFrom,
+          name: 'Syndicat Apicole de La Réunion'
+        },
+        to: [
+          {
+            email: to
+          }
+        ],
+        subject: subject,
+        htmlContent: html
+      },
+      {
+        headers: {
+          'api-key': process.env.BREVO_API_KEY,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+
+    console.log(`✅ Email envoyé à ${to}`);
+    return { success: true, messageId: response.data.messageId };
+  } catch (error) {
+    console.error(`Erreur envoi email à ${to}:`, error.response?.data || error.message);
+    throw new Error(error.response?.data?.message || error.message);
+  }
 };
+
+module.exports = sendEmail;
+
+// Exporter aussi les autres fonctions pour rétrocompatibilité
+module.exports.envoyerEmail = envoyerEmail;
+module.exports.envoyerCommunication = envoyerCommunication;
+module.exports.getEmailTemplate = getEmailTemplate;
+module.exports.envoyerEmailBienvenueAdmin = envoyerEmailBienvenueAdmin;
+module.exports.envoyerEmailAvecPieceJointe = envoyerEmailAvecPieceJointe;
+module.exports.envoyerConvocation = envoyerConvocation;
+module.exports.sendEmail = sendEmail;
