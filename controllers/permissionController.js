@@ -185,6 +185,14 @@ const getPermissionsStructure = asyncHandler(async (req, res) => {
         { key: 'access', label: 'Accès au compte Stripe', description: 'Consulter les informations financières et le solde Stripe' },
       ],
     },
+    unafServices: {
+      label: 'Suivi Services UNAF',
+      icon: 'DocumentTextIcon',
+      permissions: [
+        { key: 'access', label: 'Accès au module', description: 'Accéder au suivi des services UNAF (assurances)' },
+        { key: 'generateExport', label: 'Générer les exports', description: 'Générer manuellement les exports UNAF' },
+      ],
+    },
   };
 
   res.json(structure);

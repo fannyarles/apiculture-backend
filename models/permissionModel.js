@@ -190,6 +190,19 @@ const permissionSchema = mongoose.Schema(
         description: 'Accès au compte Stripe et aux informations financières',
       },
     },
+    // Module Suivi Services UNAF
+    unafServices: {
+      access: {
+        type: Boolean,
+        default: false,
+        description: 'Accès au module suivi des services UNAF (assurances)',
+      },
+      generateExport: {
+        type: Boolean,
+        default: false,
+        description: 'Générer les exports UNAF manuellement',
+      },
+    },
   },
   {
     timestamps: true,
@@ -260,6 +273,10 @@ permissionSchema.statics.createDefaultPermissions = async function (userId, role
     },
     finances: {
       access: false,
+    },
+    unafServices: {
+      access: false,
+      generateExport: false,
     },
   };
 

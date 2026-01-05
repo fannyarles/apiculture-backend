@@ -54,7 +54,7 @@ const getTransactions = asyncHandler(async (req, res) => {
     throw new Error('Accès non autorisé');
   }
 
-  const { limit = 10 } = req.query;
+  const { limit = 50 } = req.query;
 
   try {
     const transactions = await stripe.balanceTransactions.list({
@@ -95,7 +95,7 @@ const getPayments = asyncHandler(async (req, res) => {
     throw new Error('Accès non autorisé');
   }
 
-  const { limit = 10 } = req.query;
+  const { limit = 50 } = req.query;
 
   try {
     const payments = await stripe.paymentIntents.list({
