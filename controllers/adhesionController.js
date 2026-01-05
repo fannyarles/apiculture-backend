@@ -288,11 +288,11 @@ const createAdhesion = asyncHandler(async (req, res) => {
   }
 
   // Vérifier si l'utilisateur est un nouvel adhérent pour cet organisme
-  // (n'a jamais eu d'adhésion active pour cet organisme)
+  // (n'a jamais eu d'adhésion active ou expirée pour cet organisme l'année précédente)
   const previousAdhesions = await Adhesion.find({
     user: req.user._id,
     organisme,
-    status: 'actif',
+    status: { $in: ['actif', 'expiree'] },
     annee: annee - 1,
     _id: { $ne: null } // Exclure l'adhésion actuelle si elle existe
   });
