@@ -565,7 +565,7 @@ const canSubscribeUNAF = asyncHandler(async (req, res) => {
     });
   }
 
-  // Retourner les données pré-remplies depuis l'adhésion SAR
+  // Retourner les données pré-remplies depuis l'adhésion SAR et le profil utilisateur
   res.json({
     canSubscribe: true,
     adhesion: {
@@ -574,7 +574,8 @@ const canSubscribeUNAF = asyncHandler(async (req, res) => {
       organisme: adhesionSAR.organisme,
     },
     prefillData: {
-      siret: adhesionSAR.siret || '',
+      siret: adhesionSAR.siret || req.user.siret || '',
+      napi: adhesionSAR.napi || req.user.napi || '',
       nombreEmplacements: adhesionSAR.nombreRuchers || 0,
       nombreRuches: adhesionSAR.nombreRuches || 0,
     },

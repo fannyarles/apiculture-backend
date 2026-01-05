@@ -8,6 +8,7 @@ const {
 } = require('../services/unafExportService');
 const UNAFExport = require('../models/unafExportModel');
 const Service = require('../models/serviceModel');
+const Permission = require('../models/permissionModel');
 const { getSignedUrl, downloadFile } = require('../services/s3Service');
 const { envoyerEmailAvecPieceJointe } = require('../services/emailService');
 const { generateAndUploadServiceAttestation, generateAndUploadEcocontributionAttestation } = require('../services/pdfService');
@@ -68,12 +69,15 @@ const getPendingPayments = asyncHandler(async (req, res) => {
 
 // @desc    Générer manuellement un export UNAF
 // @route   POST /api/unaf-export/generate
-// @access  Private/SuperAdmin
+// @access  Private/Permission unafServices.generateExport
 const generateExport = asyncHandler(async (req, res) => {
-  // Vérification super_admin
-  if (req.user.role !== 'super_admin') {
+  // Vérification de la permission unafServices.generateExport
+  const userPermissions = await Permission.findOne({ userId: req.user._id });
+  const hasPermission = req.user.role === 'super_admin' || userPermissions?.unafServices?.generateExport;
+  
+  if (!hasPermission) {
     res.status(403);
-    throw new Error('Accès réservé au super administrateur');
+    throw new Error('Vous n\'avez pas la permission de générer un export UNAF');
   }
 
   const { annee } = req.body;
@@ -138,12 +142,15 @@ const getExportDates = asyncHandler(async (req, res) => {
 
 // @desc    Supprimer un export UNAF (uniquement si pas encore envoyé)
 // @route   DELETE /api/unaf-export/:id
-// @access  Private/SuperAdmin
+// @access  Private/Permission unafServices.deleteExport
 const deleteExport = asyncHandler(async (req, res) => {
-  // Vérification super_admin
-  if (req.user.role !== 'super_admin') {
+  // Vérification de la permission unafServices.deleteExport
+  const userPermissions = await Permission.findOne({ userId: req.user._id });
+  const hasPermission = req.user.role === 'super_admin' || userPermissions?.unafServices?.deleteExport;
+  
+  if (!hasPermission) {
     res.status(403);
-    throw new Error('Accès réservé au super administrateur');
+    throw new Error('Vous n\'avez pas la permission de supprimer un export UNAF');
   }
 
   const { id } = req.params;
@@ -170,12 +177,15 @@ const deleteExport = asyncHandler(async (req, res) => {
 
 // @desc    Envoyer un export par email à l'UNAF
 // @route   PUT /api/unaf-export/:id/send
-// @access  Private/SuperAdmin
+// @access  Private/Permission unafServices.sendExport
 const sendExport = asyncHandler(async (req, res) => {
-  // Vérification super_admin
-  if (req.user.role !== 'super_admin') {
+  // Vérification de la permission unafServices.sendExport
+  const userPermissions = await Permission.findOne({ userId: req.user._id });
+  const hasPermission = req.user.role === 'super_admin' || userPermissions?.unafServices?.sendExport;
+  
+  if (!hasPermission) {
     res.status(403);
-    throw new Error('Accès réservé au super administrateur');
+    throw new Error('Vous n\'avez pas la permission d\'envoyer un export UNAF');
   }
 
   const { id } = req.params;
@@ -282,12 +292,15 @@ const sendExport = asyncHandler(async (req, res) => {
 
 // @desc    Activer les adhésions d'un export UNAF
 // @route   PUT /api/unaf-export/:id/activate
-// @access  Private/SuperAdmin
+// @access  Private/Permission unafServices.activateExport
 const activateExport = asyncHandler(async (req, res) => {
-  // Vérification super_admin
-  if (req.user.role !== 'super_admin') {
+  // Vérification de la permission unafServices.activateExport
+  const userPermissions = await Permission.findOne({ userId: req.user._id });
+  const hasPermission = req.user.role === 'super_admin' || userPermissions?.unafServices?.activateExport;
+  
+  if (!hasPermission) {
     res.status(403);
-    throw new Error('Accès réservé au super administrateur');
+    throw new Error('Vous n\'avez pas la permission d\'activer un export UNAF');
   }
 
   const { id } = req.params;

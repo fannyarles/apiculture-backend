@@ -202,6 +202,21 @@ const permissionSchema = mongoose.Schema(
         default: false,
         description: 'Générer les exports UNAF manuellement',
       },
+      sendExport: {
+        type: Boolean,
+        default: false,
+        description: 'Envoyer les exports UNAF par email',
+      },
+      activateExport: {
+        type: Boolean,
+        default: false,
+        description: 'Activer les adhésions d\'un export UNAF',
+      },
+      deleteExport: {
+        type: Boolean,
+        default: false,
+        description: 'Supprimer un export UNAF',
+      },
     },
   },
   {
@@ -277,6 +292,9 @@ permissionSchema.statics.createDefaultPermissions = async function (userId, role
     unafServices: {
       access: false,
       generateExport: false,
+      sendExport: false,
+      activateExport: false,
+      deleteExport: false,
     },
   };
 

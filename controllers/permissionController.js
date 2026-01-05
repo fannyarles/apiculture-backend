@@ -191,6 +191,9 @@ const getPermissionsStructure = asyncHandler(async (req, res) => {
       permissions: [
         { key: 'access', label: 'Accès au module', description: 'Accéder au suivi des services UNAF (assurances)' },
         { key: 'generateExport', label: 'Générer les exports', description: 'Générer manuellement les exports UNAF' },
+        { key: 'sendExport', label: 'Envoyer les exports', description: 'Envoyer les exports UNAF par email à l\'UNAF' },
+        { key: 'activateExport', label: 'Activer les exports', description: 'Activer les adhésions d\'un export UNAF' },
+        { key: 'deleteExport', label: 'Supprimer les exports', description: 'Supprimer un export UNAF' },
       ],
     },
   };

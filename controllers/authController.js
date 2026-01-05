@@ -227,6 +227,11 @@ const updateUserProfile = asyncHandler(async (req, res) => {
     if (req.body.designation !== undefined) user.designation = req.body.designation;
     if (req.body.raisonSociale !== undefined) user.raisonSociale = req.body.raisonSociale;
     
+    // Mettre à jour les informations apicoles
+    if (req.body.napi !== undefined) user.napi = req.body.napi;
+    if (req.body.numeroAmexa !== undefined) user.numeroAmexa = req.body.numeroAmexa;
+    if (req.body.siret !== undefined) user.siret = req.body.siret;
+    
     // Mettre à jour l'adresse (objet complet)
     if (req.body.adresse !== undefined) {
       user.adresse = req.body.adresse;
@@ -246,6 +251,9 @@ const updateUserProfile = asyncHandler(async (req, res) => {
       typePersonne: updatedUser.typePersonne,
       designation: updatedUser.designation,
       raisonSociale: updatedUser.raisonSociale,
+      napi: updatedUser.napi,
+      numeroAmexa: updatedUser.numeroAmexa,
+      siret: updatedUser.siret,
       role: updatedUser.role,
       roles: updatedUser.roles,
       token: generateToken(updatedUser._id),
