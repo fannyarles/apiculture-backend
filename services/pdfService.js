@@ -439,6 +439,21 @@ const generateAttestationPDF = async (adhesion) => {
           }
         }
       }
+      
+      // Signature du président AMAIR depuis S3 ou local
+      if (adhesion.organisme === 'AMAIR') {
+        try {
+          const signatureBuffer = await downloadFile('signatures/AMAIR_signature_DC.png');
+          doc.image(signatureBuffer, 50, doc.y, { width: 150 });
+        } catch (err) {
+          console.warn('Signature AMAIR non trouvée sur S3:', err.message);
+          // Fallback : essayer la signature locale
+          const localSignaturePath = path.join(__dirname, '../uploads/signatures/AMAIR_signature_DC.png');
+          if (fs.existsSync(localSignaturePath)) {
+            doc.image(localSignaturePath, 50, doc.y, { width: 150 });
+          }
+        }
+      }
 
       // Pied de page
       doc.fontSize(8)
