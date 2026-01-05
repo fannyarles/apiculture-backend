@@ -146,12 +146,12 @@ const createAdhesion = asyncHandler(async (req, res) => {
   let statusInitial = 'en_attente';
   
   if (organisme === 'SAR') {
-    // Vérifier si l'utilisateur a une adhésion active de l'année N-1
+    // Vérifier si l'utilisateur a une adhésion active ou expirée de l'année N-1
     const adhesionN1 = await Adhesion.findOne({
       user: req.user._id,
       organisme: 'SAR',
       annee: annee - 1,
-      status: 'actif'
+      status: { $in: ['actif', 'expiree'] }
     });
     
     const cotisationBase = parametre.tarifs.SAR.base;
