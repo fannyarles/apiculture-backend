@@ -381,7 +381,7 @@ const generateUNAFExportCron = () => {
   const nextDates = EXPORT_DATES_2026.filter(d => d > today).slice(0, 3);
   console.log('📅 Cron job configuré: Export UNAF automatique (8h00 aux dates définies)');
   if (nextDates.length > 0) {
-    console.log(`   Prochains exports: ${nextDates.map(d => d.toLocaleDateString('fr-FR')).join(', ')}`);
+    console.log(`Prochains exports: ${nextDates.map(d => d.toLocaleDateString('fr-FR')).join(', ')}`);
   }
 };
 
