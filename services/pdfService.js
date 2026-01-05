@@ -429,13 +429,13 @@ const generateAttestationPDF = async (adhesion) => {
       if (adhesion.organisme === 'SAR') {
         try {
           const signatureBuffer = await downloadFile('signatures/SAR_signature_PF.png');
-          doc.image(signatureBuffer, 50, doc.y, { width: 150 });
+          doc.image(signatureBuffer, 50, doc.y, { width: 110 });
         } catch (err) {
           console.warn('Signature SAR non trouvée sur S3:', err.message);
           // Fallback : essayer la signature locale
           const localSignaturePath = path.join(__dirname, '../uploads/signatures/SAR_signature_PF.png');
           if (fs.existsSync(localSignaturePath)) {
-            doc.image(localSignaturePath, 50, doc.y, { width: 150 });
+            doc.image(localSignaturePath, 50, doc.y, { width: 110 });
           }
         }
       }
@@ -444,13 +444,13 @@ const generateAttestationPDF = async (adhesion) => {
       if (adhesion.organisme === 'AMAIR') {
         try {
           const signatureBuffer = await downloadFile('signatures/AMAIR_signature_DC.png');
-          doc.image(signatureBuffer, 50, doc.y, { width: 150 });
+          doc.image(signatureBuffer, 50, doc.y, { width: 110 });
         } catch (err) {
           console.warn('Signature AMAIR non trouvée sur S3:', err.message);
           // Fallback : essayer la signature locale
           const localSignaturePath = path.join(__dirname, '../uploads/signatures/AMAIR_signature_DC.png');
           if (fs.existsSync(localSignaturePath)) {
-            doc.image(localSignaturePath, 50, doc.y, { width: 150 });
+            doc.image(localSignaturePath, 50, doc.y, { width: 110 });
           }
         }
       }
