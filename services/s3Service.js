@@ -162,13 +162,34 @@ const downloadAndUploadStripeReceipt = async (receiptUrl, paymentIntentId, type 
   const axios = require('axios');
   
   try {
-    // Télécharger le reçu depuis Stripe (format PDF)
-    const response = await axios.get(receiptUrl, { 
+    // Stripe receipt_url est une page HTML, ajouter /pdf pour obtenir le PDF
+    const pdfUrl = receiptUrl.endsWith('/') ? `${receiptUrl}pdf` : `${receiptUrl}/pdf`;
+    
+    console.log(`📥 Téléchargement du reçu PDF: ${pdfUrl}`);
+    
+    // Télécharger le reçu PDF depuis Stripe
+    const response = await axios.get(pdfUrl, { 
       responseType: 'arraybuffer',
-      timeout: 30000
+      timeout: 30000,
+      headers: {
+        'Accept': 'application/pdf'
+      }
     });
     
+    // Vérifier que c'est bien un PDF (commence par %PDF)
     const pdfBuffer = Buffer.from(response.data);
+    const isPdf = pdfBuffer.slice(0, 4).toString() === '%PDF';
+    
+    if (!isPdf) {
+      console.warn('⚠️ Le fichier téléchargé n\'est pas un PDF valide, stockage de l\'URL à la place');
+      // Stocker uniquement l'URL du reçu si le PDF n'est pas disponible
+      return {
+        key: null,
+        receiptUrl: receiptUrl,
+        fileName: null
+      };
+    }
+    
     const fileName = `recu_${type}_${paymentIntentId}.pdf`;
     const key = `recus/${type}/${Date.now()}-${fileName}`;
     
@@ -182,15 +203,21 @@ const downloadAndUploadStripeReceipt = async (receiptUrl, paymentIntentId, type 
 
     await s3.upload(params).promise();
     
-    console.log(`✅ Reçu Stripe uploadé: ${key}`);
+    console.log(`✅ Reçu Stripe PDF uploadé: ${key}`);
     
     return {
       key: key,
-      fileName: fileName
+      fileName: fileName,
+      receiptUrl: receiptUrl
     };
   } catch (error) {
     console.error('Erreur téléchargement/upload reçu Stripe:', error.message);
-    throw new Error('Erreur lors de la sauvegarde du reçu de paiement');
+    // En cas d'erreur, retourner l'URL du reçu pour accès direct
+    return {
+      key: null,
+      receiptUrl: receiptUrl,
+      fileName: null
+    };
   }
 };
 
