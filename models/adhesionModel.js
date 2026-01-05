@@ -130,6 +130,9 @@ const adhesionSchema = mongoose.Schema(
     receiptKey: {
       type: String,
     },
+    receiptUrl: {
+      type: String,
+    },
     // Informations personnelles (snapshot au moment de l'adhésion)
     informationsPersonnelles: {
       typePersonne: {

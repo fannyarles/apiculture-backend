@@ -129,6 +129,9 @@ const serviceSchema = mongoose.Schema(
     receiptKey: {
       type: String,
     },
+    receiptUrl: {
+      type: String,
+    },
     // Document de preuve de paiement (uploadé par l'admin)
     documentPaiement: {
       nom: String,
@@ -234,6 +237,7 @@ const serviceSchema = mongoose.Schema(
         },
         datePaiement: Date,
         receiptKey: String,
+        receiptUrl: String,
       },
       signature: String,
       signatureDate: Date,

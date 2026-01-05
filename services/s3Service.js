@@ -152,60 +152,18 @@ const downloadFile = async (key) => {
 };
 
 /**
- * Télécharge le reçu PDF Stripe et l'upload vers S3
- * Stripe génère un PDF accessible via l'URL du reçu + /pdf
+ * Retourne l'URL du reçu Stripe (téléchargement PDF désactivé)
+ * Les reçus Stripe restent accessibles indéfiniment via leur URL
  * @param {string} receiptUrl - L'URL du reçu Stripe
  * @param {string} paymentIntentId - L'ID du PaymentIntent
  * @param {string} type - Le type de paiement ('adhesion', 'service', 'modification')
- * @returns {Promise<Object>} - Clé S3 du fichier uploadé ou URL de fallback
+ * @returns {Promise<Object>} - URL du reçu Stripe
  */
 const downloadAndUploadStripeReceipt = async (receiptUrl, paymentIntentId, type = 'adhesion') => {
-  const axios = require('axios');
-  
-  try {
-    // Stripe permet d'obtenir un PDF en ajoutant /pdf à l'URL du reçu
-    const pdfUrl = receiptUrl.replace(/\/?$/, '/pdf');
-    
-    console.log(`📥 Téléchargement du reçu PDF Stripe: ${pdfUrl}`);
-    
-    // Télécharger avec suivi des redirections
-    const response = await axios.get(pdfUrl, { 
-      responseType: 'arraybuffer',
-      timeout: 30000,
-      maxRedirects: 5,
-      headers: {
-        'Accept': 'application/pdf,*/*',
-        'User-Agent': 'Mozilla/5.0 (compatible; NodeJS)'
-      }
-    });
-    
-    const pdfBuffer = Buffer.from(response.data);
-    
-    // Vérifier que c'est bien un PDF
-    if (pdfBuffer.length < 100 || pdfBuffer.slice(0, 4).toString() !== '%PDF') {
-      console.warn('⚠️ Réponse non-PDF reçue, stockage de l\'URL uniquement');
-      return { key: null, receiptUrl, fileName: null };
-    }
-    
-    const fileName = `recu_${type}_${paymentIntentId}.pdf`;
-    const key = `recus/${type}/${Date.now()}-${fileName}`;
-    
-    await s3.upload({
-      Bucket: bucketName,
-      Key: key,
-      Body: pdfBuffer,
-      ContentType: 'application/pdf',
-      ACL: 'private'
-    }).promise();
-    
-    console.log(`✅ Reçu PDF Stripe uploadé: ${key}`);
-    
-    return { key, fileName, receiptUrl };
-  } catch (error) {
-    console.error('⚠️ Impossible de télécharger le PDF Stripe:', error.message);
-    console.log(`📧 Fallback: URL du reçu stockée: ${receiptUrl}`);
-    return { key: null, receiptUrl, fileName: null };
-  }
+  // Téléchargement PDF désactivé - on stocke uniquement l'URL du reçu Stripe
+  // Les reçus Stripe sont accessibles indéfiniment et peuvent être imprimés/téléchargés par l'utilisateur
+  console.log(`📧 Reçu Stripe disponible: ${receiptUrl}`);
+  return { key: null, receiptUrl, fileName: null };
 };
 
 module.exports = {

@@ -401,9 +401,8 @@ const handleStripeWebhook = asyncHandler(async (req, res) => {
             }
             
             if (receiptUrl) {
-              const receiptResult = await downloadAndUploadStripeReceipt(receiptUrl, session.payment_intent, 'service');
-              service.receiptKey = receiptResult.key;
-              console.log(`✅ Reçu service sauvegardé: ${receiptResult.key}`);
+              service.receiptUrl = receiptUrl;
+              console.log(`✅ Reçu service URL sauvegardée: ${receiptUrl}`);
             }
           } catch (receiptError) {
             console.error('Erreur sauvegarde reçu service:', receiptError.message);
@@ -553,9 +552,8 @@ const handleStripeWebhook = asyncHandler(async (req, res) => {
               if (paymentIntent.latest_charge) {
                 const charge = await stripe.charges.retrieve(paymentIntent.latest_charge);
                 if (charge.receipt_url) {
-                  const receiptResult = await downloadAndUploadStripeReceipt(charge.receipt_url, session.payment_intent, 'modification');
-                  historiqueEntry.paiement.receiptKey = receiptResult.key;
-                  console.log(`✅ Reçu modification sauvegardé: ${receiptResult.key}`);
+                  historiqueEntry.paiement.receiptUrl = charge.receipt_url;
+                  console.log(`✅ Reçu modification URL sauvegardée: ${charge.receipt_url}`);
                 }
               }
             } catch (receiptError) {
@@ -632,9 +630,8 @@ const handleStripeWebhook = asyncHandler(async (req, res) => {
           if (paymentIntent.latest_charge) {
             const charge = await stripe.charges.retrieve(paymentIntent.latest_charge);
             if (charge.receipt_url) {
-              const receiptResult = await downloadAndUploadStripeReceipt(charge.receipt_url, session.payment_intent, 'adhesion');
-              adhesion.receiptKey = receiptResult.key;
-              console.log(`✅ Reçu adhésion sauvegardé: ${receiptResult.key}`);
+              adhesion.paiement.receiptUrl = charge.receipt_url;
+              console.log(`✅ Reçu adhésion URL sauvegardée: ${charge.receipt_url}`);
             }
           }
         } catch (receiptError) {
