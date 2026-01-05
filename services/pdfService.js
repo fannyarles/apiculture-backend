@@ -1012,6 +1012,7 @@ const generateUNAFAttestationPDF = async (service) => {
       const nombreRuches = unafData.nombreRuches || 0;
       const dateValidation = new Date(service.dateValidation || service.createdAt);
       const dateValidationFormatee = dateValidation.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+      const dateAdhesionFormatee = dateValidationFormatee;
       
       // Déterminer la date de début de période
       const now = new Date();
