@@ -474,33 +474,33 @@ const userActivationCron = () => {
       }
       
       // 2. Supprimer les comptes expirés (créés il y a plus de 60 jours, non activés)
-      const expiredUsers = await User.find({
-        activatedAt: null,
-        createdFromAdhesion: { $ne: null },
-        createdAt: { $lte: twoMonthsAgo },
-      });
+      // const expiredUsers = await User.find({
+      //   activatedAt: null,
+      //   createdFromAdhesion: { $ne: null },
+      //   createdAt: { $lte: twoMonthsAgo },
+      // });
       
-      let deletedCount = 0;
-      for (const user of expiredUsers) {
-        try {
-          // Supprimer les adhésions associées
-          await Adhesion.deleteMany({ user: user._id });
-          // Supprimer l'utilisateur
-          await User.findByIdAndDelete(user._id);
-          deletedCount++;
-          console.log(`   🗑️ Compte supprimé: ${user.email}`);
-        } catch (error) {
-          console.error(`   ❌ Erreur suppression ${user.email}:`, error.message);
-        }
-      }
+      // let deletedCount = 0;
+      // for (const user of expiredUsers) {
+      //   try {
+      //     // Supprimer les adhésions associées
+      //     await Adhesion.deleteMany({ user: user._id });
+      //     // Supprimer l'utilisateur
+      //     await User.findByIdAndDelete(user._id);
+      //     deletedCount++;
+      //     console.log(`   🗑️ Compte supprimé: ${user.email}`);
+      //   } catch (error) {
+      //     console.error(`   ❌ Erreur suppression ${user.email}:`, error.message);
+      //   }
+      // }
       
-      if (deletedCount > 0) {
-        console.log(`🗑️ ${deletedCount} compte(s) expiré(s) supprimé(s)`);
-      }
+      // if (deletedCount > 0) {
+      //   console.log(`🗑️ ${deletedCount} compte(s) expiré(s) supprimé(s)`);
+      // }
       
-      if (remindersSent === 0 && deletedCount === 0) {
-        console.log('ℹ️ Aucune action nécessaire pour les comptes en attente');
-      }
+      // if (remindersSent === 0 && deletedCount === 0) {
+      //   console.log('ℹ️ Aucune action nécessaire pour les comptes en attente');
+      // }
       
     } catch (error) {
       console.error('❌ Erreur lors du traitement des comptes en attente:', error);
