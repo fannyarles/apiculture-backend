@@ -298,14 +298,14 @@ const createPaymentSession = asyncHandler(async (req, res) => {
       },
     };
 
-    // Ajouter le transfert automatique si un compte de destination est configuré
-    if (destinationAccount) {
-      sessionConfig.payment_intent_data.application_fee_amount = 0; // Pas de frais de plateforme (100% à l'organisme)
-      sessionConfig.payment_intent_data.transfer_data = {
-        destination: destinationAccount,
-      };
-      console.log(`💸 Paiement configuré pour transfert vers ${adhesion.organisme} (${destinationAccount})`);
-    }
+    // Transfert automatique désactivé temporairement (comptes connectés non configurés en mode live)
+    // if (destinationAccount) {
+    //   sessionConfig.payment_intent_data.application_fee_amount = 0; // Pas de frais de plateforme (100% à l'organisme)
+    //   sessionConfig.payment_intent_data.transfer_data = {
+    //     destination: destinationAccount,
+    //   };
+    //   console.log(`💸 Paiement configuré pour transfert vers ${adhesion.organisme} (${destinationAccount})`);
+    // }
 
     const session = await stripe.checkout.sessions.create(sessionConfig);
 
@@ -1112,14 +1112,14 @@ const createServicePaymentSession = asyncHandler(async (req, res) => {
       },
     };
 
-    // Ajouter le transfert automatique si un compte de destination est configuré
-    if (destinationAccount) {
-      sessionConfig.payment_intent_data.application_fee_amount = 0;
-      sessionConfig.payment_intent_data.transfer_data = {
-        destination: destinationAccount,
-      };
-      console.log(`💸 Paiement service configuré pour transfert vers ${service.typeService === 'miellerie' ? 'AMAIR' : 'SAR'} (${destinationAccount})`);
-    }
+    // Transfert automatique désactivé temporairement (comptes connectés non configurés en mode live)
+    // if (destinationAccount) {
+    //   sessionConfig.payment_intent_data.application_fee_amount = 0;
+    //   sessionConfig.payment_intent_data.transfer_data = {
+    //     destination: destinationAccount,
+    //   };
+    //   console.log(`💸 Paiement service configuré pour transfert vers ${service.typeService === 'miellerie' ? 'AMAIR' : 'SAR'} (${destinationAccount})`);
+    // }
 
     const session = await stripe.checkout.sessions.create(sessionConfig);
 
@@ -1510,12 +1510,13 @@ const createUNAFModificationPaymentSession = asyncHandler(async (req, res) => {
       },
     };
 
-    if (destinationAccount) {
-      sessionConfig.payment_intent_data.application_fee_amount = 0;
-      sessionConfig.payment_intent_data.transfer_data = {
-        destination: destinationAccount,
-      };
-    }
+    // Transfert automatique désactivé temporairement (comptes connectés non configurés en mode live)
+    // if (destinationAccount) {
+    //   sessionConfig.payment_intent_data.application_fee_amount = 0;
+    //   sessionConfig.payment_intent_data.transfer_data = {
+    //     destination: destinationAccount,
+    //   };
+    // }
 
     const session = await stripe.checkout.sessions.create(sessionConfig);
 
