@@ -76,15 +76,19 @@ async function recoverMissedPayments() {
 
       const metadata = session.metadata;
       
-      if (!metadata || !metadata.type) {
-        console.log(`   ⏭️  Ignorée (pas de metadata.type)`);
+      // Si pas de type mais adhesionId présent, c'est une adhésion
+      const isAdhesion = metadata.type === 'adhesion' || (metadata.adhesionId && !metadata.serviceId);
+      const isService = metadata.type === 'service' || metadata.serviceId;
+      
+      if (!isAdhesion && !isService) {
+        console.log(`   ⏭️  Ignorée (pas de metadata valide)`);
         results.skipped++;
         continue;
       }
       
       try {
         // Traitement des adhésions
-        if (metadata.type === 'adhesion') {
+        if (isAdhesion) {
           const adhesionId = metadata.adhesionId;
           
           // Vérifier si déjà traité
@@ -185,7 +189,7 @@ async function recoverMissedPayments() {
 
         } 
         // Traitement des services
-        else if (metadata.type === 'service') {
+        else if (isService) {
           const serviceId = metadata.serviceId;
           
           const service = await Service.findById(serviceId).populate(
