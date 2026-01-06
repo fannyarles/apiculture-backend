@@ -124,20 +124,22 @@ async function recoverMissedPayments() {
           // Mettre à jour le paiement
           adhesion.paiement.status = 'paye';
           adhesion.paiement.datePaiement = new Date(session.created * 1000);
-          adhesion.paiement.stripePaymentIntentId = session.payment_intent;
+          // Si payment_intent est un objet, extraire l'ID
+          const paymentIntentId = typeof session.payment_intent === 'object' 
+            ? session.payment_intent.id 
+            : session.payment_intent;
+          adhesion.paiement.stripePaymentIntentId = paymentIntentId;
           adhesion.paiement.stripeSessionId = session.id;
           adhesion.status = 'actif';
           adhesion.dateValidation = new Date(session.created * 1000);
 
           // Récupérer le reçu Stripe
           try {
-            const charge = await stripe.charges.retrieve(session.payment_intent, {
-              expand: ['payment_intent']
-            }).catch(() => null);
+            const charge = await stripe.charges.retrieve(paymentIntentId).catch(() => null);
             
             let receiptUrl = charge?.receipt_url;
             if (!receiptUrl) {
-              const paymentIntent = await stripe.paymentIntents.retrieve(session.payment_intent);
+              const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
               if (paymentIntent.latest_charge) {
                 const chargeFromPI = await stripe.charges.retrieve(paymentIntent.latest_charge);
                 receiptUrl = chargeFromPI.receipt_url;
@@ -208,7 +210,10 @@ async function recoverMissedPayments() {
           }
 
           // Si déjà payé, ignorer
-          if (service.paiement?.status === 'paye' && service.paiement?.stripePaymentIntentId === session.payment_intent) {
+          const servicePaymentIntentCheck = typeof session.payment_intent === 'object' 
+            ? session.payment_intent.id 
+            : session.payment_intent;
+          if (service.paiement?.status === 'paye' && service.paiement?.stripePaymentIntentId === servicePaymentIntentCheck) {
             results.alreadyProcessed++;
             continue;
           }
@@ -221,7 +226,11 @@ async function recoverMissedPayments() {
           // Mettre à jour le paiement
           service.paiement.status = 'paye';
           service.paiement.datePaiement = new Date(session.created * 1000);
-          service.paiement.stripePaymentIntentId = session.payment_intent;
+          // Si payment_intent est un objet, extraire l'ID
+          const servicePaymentIntentId = typeof session.payment_intent === 'object' 
+            ? session.payment_intent.id 
+            : session.payment_intent;
+          service.paiement.stripePaymentIntentId = servicePaymentIntentId;
 
           // Mettre à jour le statut global
           if (service.typeService === 'assurance_unaf') {
@@ -235,13 +244,11 @@ async function recoverMissedPayments() {
 
           // Récupérer le reçu Stripe
           try {
-            const charge = await stripe.charges.retrieve(session.payment_intent, {
-              expand: ['payment_intent']
-            }).catch(() => null);
+            const charge = await stripe.charges.retrieve(servicePaymentIntentId).catch(() => null);
             
             let receiptUrl = charge?.receipt_url;
             if (!receiptUrl) {
-              const paymentIntent = await stripe.paymentIntents.retrieve(session.payment_intent);
+              const paymentIntent = await stripe.paymentIntents.retrieve(servicePaymentIntentId);
               if (paymentIntent.latest_charge) {
                 const chargeFromPI = await stripe.charges.retrieve(paymentIntent.latest_charge);
                 receiptUrl = chargeFromPI.receipt_url;
