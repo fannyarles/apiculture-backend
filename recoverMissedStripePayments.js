@@ -56,18 +56,31 @@ async function recoverMissedPayments() {
       adhesionsProcessed: 0,
       servicesProcessed: 0,
       alreadyProcessed: 0,
+      skipped: 0,
       errors: [],
       processed: []
     };
 
     // Traiter chaque session
     for (const session of allSessions) {
+      console.log(`\n🔍 Session: ${session.id}`);
+      console.log(`   Payment status: ${session.payment_status}`);
+      console.log(`   Metadata:`, session.metadata);
+      
       // Ignorer les sessions non payées
       if (session.payment_status !== 'paid') {
+        console.log(`   ⏭️  Ignorée (non payée)`);
+        results.skipped++;
         continue;
       }
 
       const metadata = session.metadata;
+      
+      if (!metadata || !metadata.type) {
+        console.log(`   ⏭️  Ignorée (pas de metadata.type)`);
+        results.skipped++;
+        continue;
+      }
       
       try {
         // Traitement des adhésions
@@ -304,6 +317,7 @@ async function recoverMissedPayments() {
     console.log(`✅ Adhésions traitées: ${results.adhesionsProcessed}`);
     console.log(`✅ Services traités: ${results.servicesProcessed}`);
     console.log(`⏭️  Déjà traités: ${results.alreadyProcessed}`);
+    console.log(`⏭️  Ignorées (non payées ou sans metadata): ${results.skipped}`);
     console.log(`❌ Erreurs: ${results.errors.length}`);
     
     if (results.processed.length > 0) {
