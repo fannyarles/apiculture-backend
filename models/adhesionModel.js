@@ -137,7 +137,7 @@ const adhesionSchema = mongoose.Schema(
     informationsPersonnelles: {
       typePersonne: {
         type: String,
-        enum: ['personne_physique', 'association', 'scea', 'etablissement_public'],
+        enum: ['personne_physique', 'association', 'scea', 'earl', 'etablissement_public'],
       },
       designation: {
         type: String,

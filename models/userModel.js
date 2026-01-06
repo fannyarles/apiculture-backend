@@ -5,7 +5,7 @@ const userSchema = mongoose.Schema(
   {
     typePersonne: {
       type: String,
-      enum: ['personne_physique', 'association', 'scea', 'etablissement_public'],
+      enum: ['personne_physique', 'association', 'scea', 'earl', 'etablissement_public'],
       default: 'personne_physique',
     },
     designation: {

@@ -303,8 +303,8 @@ const generateAttestationPDF = async (adhesion) => {
       
       // Vérifier si c'est une personne morale
       const attTypePersonne = infosPerso.typePersonne || user.typePersonne || 'personne_physique';
-      const attIsPersonneMorale = ['association', 'scea', 'etablissement_public'].includes(attTypePersonne);
-      const attTypeLabels = { personne_physique: 'Personne physique', association: 'Association', scea: 'SCEA', etablissement_public: 'Établissement public' };
+      const attIsPersonneMorale = ['association', 'scea', 'earl', 'etablissement_public'].includes(attTypePersonne);
+      const attTypeLabels = { personne_physique: 'Personne physique', association: 'Association', scea: 'SCEA', earl: 'EARL', etablissement_public: 'Établissement public' };
       const attDesignation = infosPerso.designation || user.designation || '';
       const nomComplet = attIsPersonneMorale ? `${attTypeLabels[attTypePersonne]} – ${infosPerso.raisonSociale || user.raisonSociale}` : `${attDesignation} ${nom} ${prenom}`;
       
@@ -593,8 +593,8 @@ const generateBulletinAdhesionPDF = async (adhesion) => {
       
       // Vérifier si c'est une personne morale
       const typePersonne = infosPerso.typePersonne || user.typePersonne || 'personne_physique';
-      const isPersonneMorale = ['association', 'scea', 'etablissement_public'].includes(typePersonne);
-      const typeLabels = { personne_physique: 'Personne physique', association: 'Association', scea: 'SCEA', etablissement_public: 'Établissement public' };
+      const isPersonneMorale = ['association', 'scea', 'earl', 'etablissement_public'].includes(typePersonne);
+      const typeLabels = { personne_physique: 'Personne physique', association: 'Association', scea: 'SCEA', earl: 'EARL', etablissement_public: 'Établissement public' };
       
       // Tableau à deux colonnes sans bordure
       const userTableLeft = 50;
@@ -999,8 +999,8 @@ const generateUNAFAttestationPDF = async (service) => {
       
       // Informations de l'adhérent
       const typePersonne = infos.typePersonne || user.typePersonne || 'personne_physique';
-      const isPersonneMorale = ['association', 'scea', 'etablissement_public'].includes(typePersonne);
-      const typeLabels = { personne_physique: 'Personne physique', association: 'Association', scea: 'SCEA', etablissement_public: 'Établissement public' };
+      const isPersonneMorale = ['association', 'scea', 'earl', 'etablissement_public'].includes(typePersonne);
+      const typeLabels = { personne_physique: 'Personne physique', association: 'Association', scea: 'SCEA', earl: 'EARL', etablissement_public: 'Établissement public' };
       const designation = infos.designation || user.designation || '';
       const nomComplet = isPersonneMorale ? `${typeLabels[typePersonne]} – ${infos.raisonSociale || user.raisonSociale}` : `${designation} ${user.nom || infos.nom || ''} ${user.prenom || infos.prenom || ''}`.trim();
       const adresse = infos.adresse || user.adresse;
@@ -1179,8 +1179,8 @@ const generateEcocontributionAttestationPDF = async (service) => {
       
       // Informations de l'adhérent
       const typePersonne = infos.typePersonne || user.typePersonne || 'personne_physique';
-      const isPersonneMorale = ['association', 'scea', 'etablissement_public'].includes(typePersonne);
-      const typeLabels = { personne_physique: 'Personne physique', association: 'Association', scea: 'SCEA', etablissement_public: 'Établissement public' };
+      const isPersonneMorale = ['association', 'scea', 'earl', 'etablissement_public'].includes(typePersonne);
+      const typeLabels = { personne_physique: 'Personne physique', association: 'Association', scea: 'SCEA', earl: 'EARL', etablissement_public: 'Établissement public' };
       const designation = infos.designation || user.designation || '';
       const nomComplet = isPersonneMorale ? `${typeLabels[typePersonne]} – ${infos.raisonSociale || user.raisonSociale}` : `${designation} ${user.nom || infos.nom || ''} ${user.prenom || infos.prenom || ''}`.trim();
       const siret = unafData.siret || '-';
@@ -1356,8 +1356,8 @@ const generateServiceAttestationPDF = async (service) => {
       
       // Vérifier si c'est une personne morale
       const svcTypePersonne = infos.typePersonne || user.typePersonne || 'personne_physique';
-      const svcIsPersonneMorale = ['association', 'scea', 'etablissement_public'].includes(svcTypePersonne);
-      const svcTypeLabels = { personne_physique: 'Personne physique', association: 'Association', scea: 'SCEA', etablissement_public: 'Établissement public' };
+      const svcIsPersonneMorale = ['association', 'scea', 'earl', 'etablissement_public'].includes(svcTypePersonne);
+      const svcTypeLabels = { personne_physique: 'Personne physique', association: 'Association', scea: 'SCEA', earl: 'EARL', etablissement_public: 'Établissement public' };
       const svcDesignation = infos.designation || user.designation || '';
       const nomComplet = svcIsPersonneMorale ? `${svcTypeLabels[svcTypePersonne]} – ${infos.raisonSociale || user.raisonSociale}` : `${svcDesignation} ${user.nom} ${user.prenom}`;
 
