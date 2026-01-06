@@ -361,6 +361,11 @@ const createAdhesion = asyncHandler(async (req, res) => {
       if (informationsPersonnelles?.adresse) userToUpdate.adresse = informationsPersonnelles.adresse;
       if (informationsPersonnelles?.dateNaissance) userToUpdate.dateNaissance = informationsPersonnelles.dateNaissance;
       
+      // Mettre à jour SIRET, NAPI, AMEXA seulement si vides dans le profil
+      if (!userToUpdate.siret && siret) userToUpdate.siret = siret;
+      if (!userToUpdate.napi && napi) userToUpdate.napi = napi;
+      if (!userToUpdate.numeroAmexa && numeroAmexa) userToUpdate.numeroAmexa = numeroAmexa;
+      
       await userToUpdate.save();
       console.log(`✅ Profil utilisateur synchronisé pour ${userToUpdate._id}`);
     }

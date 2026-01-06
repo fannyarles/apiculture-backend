@@ -456,8 +456,8 @@ const handleStripeWebhook = asyncHandler(async (req, res) => {
                   <p style="margin: 5px 0;"><strong>Date de paiement :</strong> ${new Date().toLocaleDateString('fr-FR')}</p>
                 </div>
                 
-                <p>Votre souscription aux services de l'UNAF est maintenant <strong style="color: #16a34a;">active</strong>.</p>
-                <p>Votre attestation d'adhésion est disponible dans votre espace personnel.</p>
+                <p>Votre demande de souscription est transmise à l'UNAF.</p>
+                <p>Dès réception de votre demande par l'UNAF, votre attestation d'adhésion sera disponible dans votre espace personnel.</p>
                 
                 <p>Vous pouvez consulter vos services à tout moment depuis votre espace personnel.</p>
                 
