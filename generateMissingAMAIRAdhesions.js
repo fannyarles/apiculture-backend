@@ -2,6 +2,7 @@ require('dotenv').config();
 
 const mongoose = require('mongoose');
 const Adhesion = require('./models/adhesionModel');
+const User = require('./models/userModel');
 const { generateAndUploadAttestation, generateAndUploadBulletinAdhesion } = require('./services/pdfService');
 
 /**
