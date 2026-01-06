@@ -1,6 +1,7 @@
+require('dotenv').config();
+
 const mongoose = require('mongoose');
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
-require('dotenv').config();
 
 const Adhesion = require('./models/adhesionModel');
 const Service = require('./models/serviceModel');
