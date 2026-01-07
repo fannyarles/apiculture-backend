@@ -8,7 +8,7 @@ const { errorHandler } = require('./middleware/errorMiddleware');
 if (process.env.NODE_ENV === 'preprod') {
   dotenv.config({ path: '.env.preprod' });
 } else if (process.env.NODE_ENV === 'prod') {
-  dotenv.config({ path: '.env.prod' });
+  dotenv.config({ path: '.env' });
 } else {
   dotenv.config();
 }
