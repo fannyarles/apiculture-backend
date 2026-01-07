@@ -13,11 +13,6 @@ if (process.env.NODE_ENV === 'preprod') {
   dotenv.config(); // fallback
 }
 
-// Vérifions
-console.log("ENV:", process.env.NODE_ENV);
-console.log("PORT:", process.env.PORT);
-console.log("MONGO_URI:", process.env.MONGO_URI);
-
 // Connexion à la base de données
 connectDB();
 
@@ -95,8 +90,11 @@ console.log('✅ /migration');
 // Servir les fichiers statiques pour les uploads
 app.use('/uploads', express.static('uploads'));
 
-console.log('SMTP_HOST =', process.env.SMTP_HOST);
-console.log('SMTP_PORT =', process.env.SMTP_PORT);
+
+// Vérifions
+console.log("ENV:", process.env.NODE_ENV);
+console.log("PORT:", process.env.PORT);
+console.log("MONGO_URI:", process.env.MONGO_URI);
 
 // Route de test
 app.get('/', (req, res) => {
