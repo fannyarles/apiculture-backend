@@ -5,7 +5,18 @@ const connectDB = require('./config/db');
 const { errorHandler } = require('./middleware/errorMiddleware');
 
 // Charger les variables d'environnement
-dotenv.config();
+if (process.env.NODE_ENV === 'preprod') {
+  dotenv.config({ path: '.env.preprod' });
+} else if (process.env.NODE_ENV === 'prod') {
+  dotenv.config({ path: '.env' });
+} else {
+  dotenv.config(); // fallback
+}
+
+// Vérifions
+console.log("ENV:", process.env.NODE_ENV);
+console.log("PORT:", process.env.PORT);
+console.log("MONGO_URI:", process.env.MONGO_URI);
 
 // Connexion à la base de données
 connectDB();
