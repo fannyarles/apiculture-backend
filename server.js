@@ -5,7 +5,13 @@ const connectDB = require('./config/db');
 const { errorHandler } = require('./middleware/errorMiddleware');
 
 // Charger les variables d'environnement
-dotenv.config();
+if (process.env.NODE_ENV === 'preprod') {
+  dotenv.config({ path: '.env.preprod' });
+} else if (process.env.NODE_ENV === 'prod') {
+  dotenv.config({ path: '.env.prod' });
+} else {
+  dotenv.config();
+}
 
 // Connexion à la base de données
 connectDB();
