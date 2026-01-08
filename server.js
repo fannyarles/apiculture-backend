@@ -62,6 +62,8 @@ app.use('/admin-management', require('./routes/adminManagementRoutes'));
 console.log('✅ /admin-management');
 app.use('/users', require('./routes/superAdminRoutes'));
 console.log('✅ /users');
+app.use('/super-admin', require('./routes/superAdminRoutes'));
+console.log('✅ /super-admin');
 app.use('/permissions', require('./routes/permissionRoutes'));
 console.log('✅ /permissions');
 app.use('/notification-settings', require('./routes/notificationSettingsRoutes'));
@@ -86,6 +88,8 @@ app.use('/dev', require('./routes/devRoutes'));
 console.log('✅ /dev');
 app.use('/migration', require('./routes/migrationRoutes'));
 console.log('✅ /migration');
+app.use('/regularisations', require('./routes/regularisationRoutes'));
+console.log('✅ /regularisations');
 
 // Servir les fichiers statiques pour les uploads
 app.use('/uploads', express.static('uploads'));

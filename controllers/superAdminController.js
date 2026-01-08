@@ -1,6 +1,7 @@
 const User = require('../models/userModel');
 const Permission = require('../models/permissionModel');
 const NotificationSettings = require('../models/notificationSettingsModel');
+const Service = require('../models/serviceModel');
 const { envoyerEmailBienvenueAdmin } = require('../services/emailService');
 
 // @desc    Get all admins
@@ -157,9 +158,35 @@ const deleteAdmin = async (req, res) => {
   }
 };
 
+// @desc    Purge all services
+// @route   DELETE /api/super-admin/purge/services
+// @access  Super Admin only
+const purgeServices = async (req, res) => {
+  try {
+    // Vérifier que l'utilisateur est bien super admin
+    if (req.user.role !== 'super_admin') {
+      return res.status(403).json({ message: 'Accès refusé - Super Admin uniquement' });
+    }
+
+    // Supprimer tous les services
+    const result = await Service.deleteMany({});
+
+    console.log(`🗑️ PURGE: ${result.deletedCount} services supprimés par ${req.user.email}`);
+
+    res.json({
+      message: `${result.deletedCount} service(s) supprimé(s) avec succès`,
+      deletedCount: result.deletedCount,
+    });
+  } catch (error) {
+    console.error('Erreur lors de la purge des services:', error);
+    res.status(500).json({ message: 'Erreur lors de la purge', error: error.message });
+  }
+};
+
 module.exports = {
   getAdmins,
   createAdmin,
   updateAdmin,
   deleteAdmin,
+  purgeServices,
 };
