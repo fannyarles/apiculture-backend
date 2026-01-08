@@ -233,6 +233,15 @@ const generateAndUploadAdhesionPDF = async (adhesion, signatureBase64) => {
 const generateAttestationPDF = async (adhesion) => {
   return new Promise(async (resolve, reject) => {
     try {
+      // Vérifier si l'adhérent a une adhésion actif ou expiree pour l'année N-1
+      const Adhesion = require('../models/adhesionModel');
+      const previousYearAdhesion = await Adhesion.findOne({
+        user: adhesion.user._id || adhesion.user,
+        organisme: adhesion.organisme,
+        annee: adhesion.annee - 1,
+        status: { $in: ['actif', 'expiree'] }
+      });
+      
       const doc = new PDFDocument({
         size: 'A4',
         margins: { top: 50, bottom: 50, left: 50, right: 50 }
@@ -277,11 +286,19 @@ const generateAttestationPDF = async (adhesion) => {
          .fillColor('#000000')
          .text(`ATTESTATION D'ADHÉSION ${adhesion.annee}`, textX, logoY + 40, { width: textWidth, align: 'left' });
       
-      // Validité
+      // Validité - varie selon l'existence d'une adhésion N-1
+      let validiteText;
+      if (previousYearAdhesion) {
+        validiteText = `Validité de l'adhésion du 01 janvier au 31 décembre ${adhesion.annee}`;
+      } else {
+        const datePaiement = adhesion.paiement?.datePaiement ? new Date(adhesion.paiement.datePaiement).toLocaleDateString('fr-FR') : new Date(adhesion.dateValidation || adhesion.createdAt).toLocaleDateString('fr-FR');
+        validiteText = `Validité de l'adhésion du ${datePaiement} au 31 décembre ${adhesion.annee}`;
+      }
+      
       doc.fontSize(14)
          .font('Helvetica')
          .fillColor('#000000')
-         .text(`Validité du 01 janvier au 31 décembre ${adhesion.annee}`, textX, logoY + 65, { width: textWidth, align: 'left' });
+         .text(validiteText, textX, logoY + 65, { width: textWidth, align: 'left' });
       
       // Repositionner le curseur après l'en-tête
       doc.y = logoY + logoWidth + 40;
@@ -524,6 +541,15 @@ const generateAndUploadAttestation = async (adhesion) => {
 const generateBulletinAdhesionPDF = async (adhesion) => {
   return new Promise(async (resolve, reject) => {
     try {
+      // Vérifier si l'adhérent a une adhésion actif ou expiree pour l'année N-1
+      const Adhesion = require('../models/adhesionModel');
+      const previousYearAdhesion = await Adhesion.findOne({
+        user: adhesion.user._id || adhesion.user,
+        organisme: adhesion.organisme,
+        annee: adhesion.annee - 1,
+        status: { $in: ['actif', 'expiree'] }
+      });
+      
       const doc = new PDFDocument({
         size: 'A4',
         margins: { top: 50, bottom: 50, left: 50, right: 50 }
@@ -568,11 +594,19 @@ const generateBulletinAdhesionPDF = async (adhesion) => {
          .fillColor('#000000')
          .text(`BULLETIN D'ADHÉSION ${adhesion.annee}`, textX, logoY + 40, { width: textWidth, align: 'left' });
       
-      // Validité
+      // Validité - varie selon l'existence d'une adhésion N-1
+      let validiteText;
+      if (previousYearAdhesion) {
+        validiteText = `Validité de l'adhésion du 01 janvier au 31 décembre ${adhesion.annee}`;
+      } else {
+        const datePaiement = adhesion.paiement?.datePaiement ? new Date(adhesion.paiement.datePaiement).toLocaleDateString('fr-FR') : new Date(adhesion.dateValidation || adhesion.createdAt).toLocaleDateString('fr-FR');
+        validiteText = `Validité de l'adhésion du ${datePaiement} au 31 décembre ${adhesion.annee}`;
+      }
+      
       doc.fontSize(14)
          .font('Helvetica')
          .fillColor('#000000')
-         .text(`Validité de l’adhésion du 01 janvier au 31 décembre ${adhesion.annee}`, textX, logoY + 65, { width: textWidth, align: 'left' });
+         .text(validiteText, textX, logoY + 65, { width: textWidth, align: 'left' });
       
       // Repositionner le curseur après l'en-tête
       doc.y = logoY + logoWidth;
