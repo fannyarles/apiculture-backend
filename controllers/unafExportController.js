@@ -377,6 +377,11 @@ const activateExport = asyncHandler(async (req, res) => {
             service.unafData.options.assurance.montant = TARIFS.assurance[mods.formuleApres] * nombreRuches;
             service.unafData.detailMontants.assurance = TARIFS.assurance[mods.formuleApres] * nombreRuches;
           }
+          if (mods.revueApres && mods.revueApres !== mods.revueAvant) {
+            service.unafData.options.revue.choix = mods.revueApres;
+            service.unafData.options.revue.montant = TARIFS.revue[mods.revueApres] || 0;
+            service.unafData.detailMontants.revue = TARIFS.revue[mods.revueApres] || 0;
+          }
           if (mods.affairesJuridiquesApres !== undefined && mods.affairesJuridiquesApres !== mods.affairesJuridiquesAvant) {
             service.unafData.options.affairesJuridiques.souscrit = mods.affairesJuridiquesApres;
             service.unafData.options.affairesJuridiques.montant = mods.affairesJuridiquesApres ? TARIFS.affairesJuridiques * nombreRuches : 0;
