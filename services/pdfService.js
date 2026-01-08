@@ -291,7 +291,7 @@ const generateAttestationPDF = async (adhesion) => {
       if (previousYearAdhesion) {
         validiteText = `Validité de l'adhésion du 01 janvier au 31 décembre ${adhesion.annee}`;
       } else {
-        const datePaiement = adhesion.paiement?.datePaiement ? new Date(adhesion.paiement.datePaiement).toLocaleDateString('fr-FR') : new Date(adhesion.dateValidation || adhesion.createdAt).toLocaleDateString('fr-FR');
+        const datePaiement = adhesion.paiement?.datePaiement ? new Date(adhesion.paiement.datePaiement).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long' }) : new Date(adhesion.dateValidation || adhesion.createdAt).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long' });
         validiteText = `Validité de l'adhésion du ${datePaiement} au 31 décembre ${adhesion.annee}`;
       }
       
@@ -599,7 +599,7 @@ const generateBulletinAdhesionPDF = async (adhesion) => {
       if (previousYearAdhesion) {
         validiteText = `Validité de l'adhésion du 01 janvier au 31 décembre ${adhesion.annee}`;
       } else {
-        const datePaiement = adhesion.paiement?.datePaiement ? new Date(adhesion.paiement.datePaiement).toLocaleDateString('fr-FR') : new Date(adhesion.dateValidation || adhesion.createdAt).toLocaleDateString('fr-FR');
+        const datePaiement = adhesion.paiement?.datePaiement ? new Date(adhesion.paiement.datePaiement).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long' }) : new Date(adhesion.dateValidation || adhesion.createdAt).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long' });
         validiteText = `Validité de l'adhésion du ${datePaiement} au 31 décembre ${adhesion.annee}`;
       }
       
