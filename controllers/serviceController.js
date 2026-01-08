@@ -686,7 +686,7 @@ const modifyUNAFSubscription = asyncHandler(async (req, res) => {
   }
 
   // Calculer ajout revue
-  if (modifications.revue && modifications.revue !== 'aucun' && currentOptions.revue?.choix === 'aucun') {
+  if (modifications.revue && modifications.revue !== 'aucun' && (!currentOptions.revue?.choix || currentOptions.revue?.choix === 'aucun')) {
     montantSupplementaire += TARIFS.revue[modifications.revue] || 0;
     modificationsEffectuees.revueApres = modifications.revue;
   }
