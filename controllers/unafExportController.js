@@ -315,10 +315,20 @@ const activateExport = asyncHandler(async (req, res) => {
   let activatedCount = 0;
   let errors = [];
 
+  console.log(`🔍 Tentative d'activation de ${exportRecord.servicesInclus.length} services`);
+
   // Activer les services inclus (paiements initiaux)
   for (const serviceId of exportRecord.servicesInclus) {
     try {
       const service = await Service.findById(serviceId).populate('user', 'typePersonne type prenom nom email telephone telephoneMobile adresse dateNaissance designation raisonSociale migrationUNAF2025');
+      
+      if (!service) {
+        console.log(`❌ Service ${serviceId} non trouvé`);
+        errors.push({ serviceId, error: 'Service non trouvé' });
+        continue;
+      }
+
+      console.log(`📋 Service ${serviceId}: status="${service.status}", paiement.status="${service.paiement?.status}"`);
       
       if (service && service.status === 'en_attente_validation') {
         service.status = 'actif';
@@ -343,12 +353,16 @@ const activateExport = asyncHandler(async (req, res) => {
         await service.save();
         activatedCount++;
         console.log(`✅ Service ${serviceId} activé`);
+      } else {
+        console.log(`⚠️ Service ${serviceId} non activé - status actuel: ${service.status}`);
       }
     } catch (error) {
       console.error(`Erreur activation service ${serviceId}:`, error);
       errors.push({ serviceId, error: error.message });
     }
   }
+
+  console.log(`📊 Résultat activation: ${activatedCount} services activés sur ${exportRecord.servicesInclus.length}`);
 
   // Valider et appliquer les modifications
   for (const modif of exportRecord.modificationsIncluses) {
