@@ -1156,7 +1156,7 @@ const markServicePaymentAsPaid = asyncHandler(async (req, res) => {
   }
 
   const { serviceId } = req.params;
-  const { typePaiement, datePaiement, note } = req.body;
+  const { typePaiement, datePaiement, note, modificationIndex } = req.body;
 
   if (!typePaiement || !['cheque', 'en_ligne'].includes(typePaiement)) {
     res.status(400);
@@ -1175,78 +1175,136 @@ const markServicePaymentAsPaid = asyncHandler(async (req, res) => {
     throw new Error('Service non trouvé');
   }
 
-  if (service.paiement?.status === 'paye') {
-    res.status(400);
-    throw new Error('Ce service est déjà marqué comme payé');
-  }
-
-  service.paiement.status = 'paye';
-  service.paiement.typePaiement = typePaiement;
-  service.paiement.datePaiement = new Date(datePaiement);
-  if (note) service.paiement.note = note;
-
-  // Gérer l'upload du document de paiement si fourni
-  if (req.file) {
-    try {
-      const fileName = `preuve_paiement_service_${service._id}_${Date.now()}${require('path').extname(req.file.originalname)}`;
-      const s3Result = await uploadFile(
-        req.file.buffer,
-        fileName,
-        req.file.mimetype,
-        `services/${service._id}/documents-paiement`
-      );
-
-      service.documentPaiement = {
-        nom: req.file.originalname,
-        key: s3Result.key,
-        url: s3Result.url,
-        dateUpload: new Date(),
-        uploadePar: req.user._id
-      };
-      console.log(`📎 Document de paiement uploadé pour le service ${service._id}`);
-    } catch (uploadError) {
-      console.error('Erreur upload document paiement service:', uploadError);
-      // Ne pas bloquer le processus si l'upload échoue
+  // Vérifier si c'est un paiement de modification ou le paiement initial
+  const isModificationPayment = modificationIndex !== undefined && modificationIndex !== null && modificationIndex !== '';
+  
+  if (isModificationPayment) {
+    // Marquer le paiement d'une modification spécifique
+    const modifIndex = parseInt(modificationIndex);
+    
+    if (!service.historiqueModifications || !service.historiqueModifications[modifIndex]) {
+      res.status(404);
+      throw new Error('Modification non trouvée');
     }
-  }
 
-  // Mettre à jour le statut global
-  // Pour UNAF: attendre validation admin après export
-  // Pour miellerie: activer si caution reçue, sinon attendre caution
-  if (service.typeService === 'assurance_unaf') {
-    service.status = 'en_attente_validation';
-  } else if (service.caution?.status === 'recu') {
-    service.status = 'actif';
-    service.dateValidation = new Date();
-  } else {
-    service.status = 'en_attente_caution';
-  }
+    const modification = service.historiqueModifications[modifIndex];
+    
+    if (modification.paiement?.status === 'paye') {
+      res.status(400);
+      throw new Error('Cette modification est déjà marquée comme payée');
+    }
 
-  await service.save();
+    // Initialiser l'objet paiement s'il n'existe pas
+    if (!modification.paiement) {
+      modification.paiement = {};
+    }
 
-  // Générer l'attestation si le service est actif
-  if (service.status === 'actif') {
-    try {
-      const { generateAndUploadServiceAttestation, generateAndUploadEcocontributionAttestation } = require('../services/pdfService');
-      const attestationResult = await generateAndUploadServiceAttestation(service);
-      service.attestationKey = attestationResult.key;
-      service.attestationUrl = attestationResult.url;
-      
-      // Si c'est un service UNAF avec écocontribution, générer l'attestation écocontribution
-      if (service.typeService === 'assurance_unaf' && service.unafData?.options?.ecocontribution?.souscrit) {
-        try {
-          const ecoResult = await generateAndUploadEcocontributionAttestation(service);
-          service.ecocontributionAttestationKey = ecoResult.key;
-          service.ecocontributionAttestationUrl = ecoResult.url;
-          console.log('Attestation écocontribution générée:', ecoResult.fileName);
-        } catch (ecoError) {
-          console.error('Erreur génération attestation écocontribution:', ecoError);
-        }
+    modification.paiement.status = 'paye';
+    modification.paiement.typePaiement = typePaiement;
+    modification.paiement.datePaiement = new Date(datePaiement);
+    if (note) modification.paiement.note = note;
+
+    // Gérer l'upload du document de paiement si fourni
+    if (req.file) {
+      try {
+        const fileName = `preuve_paiement_modif_${service._id}_${modifIndex}_${Date.now()}${require('path').extname(req.file.originalname)}`;
+        const s3Result = await uploadFile(
+          req.file.buffer,
+          fileName,
+          req.file.mimetype,
+          `services/${service._id}/documents-paiement`
+        );
+
+        modification.paiement.documentPaiement = {
+          nom: req.file.originalname,
+          key: s3Result.key,
+          url: s3Result.url,
+          dateUpload: new Date(),
+          uploadePar: req.user._id
+        };
+        console.log(`📎 Document de paiement uploadé pour la modification #${modifIndex} du service ${service._id}`);
+      } catch (uploadError) {
+        console.error('Erreur upload document paiement modification:', uploadError);
       }
-      
-      await service.save();
-    } catch (attestationError) {
-      console.error('Erreur génération attestation service:', attestationError);
+    }
+
+    await service.save();
+    console.log(`✅ Paiement de la modification #${modifIndex} marqué comme payé pour le service ${service._id}`);
+
+  } else {
+    // Marquer le paiement initial du service
+    if (service.paiement?.status === 'paye') {
+      res.status(400);
+      throw new Error('Ce service est déjà marqué comme payé');
+    }
+
+    service.paiement.status = 'paye';
+    service.paiement.typePaiement = typePaiement;
+    service.paiement.datePaiement = new Date(datePaiement);
+    if (note) service.paiement.note = note;
+
+    // Gérer l'upload du document de paiement si fourni
+    if (req.file) {
+      try {
+        const fileName = `preuve_paiement_service_${service._id}_${Date.now()}${require('path').extname(req.file.originalname)}`;
+        const s3Result = await uploadFile(
+          req.file.buffer,
+          fileName,
+          req.file.mimetype,
+          `services/${service._id}/documents-paiement`
+        );
+
+        service.documentPaiement = {
+          nom: req.file.originalname,
+          key: s3Result.key,
+          url: s3Result.url,
+          dateUpload: new Date(),
+          uploadePar: req.user._id
+        };
+        console.log(`📎 Document de paiement uploadé pour le service ${service._id}`);
+      } catch (uploadError) {
+        console.error('Erreur upload document paiement service:', uploadError);
+      }
+    }
+
+    // Mettre à jour le statut global
+    // Pour UNAF: attendre validation admin après export
+    // Pour miellerie: activer si caution reçue, sinon attendre caution
+    if (service.typeService === 'assurance_unaf') {
+      service.status = 'en_attente_validation';
+    } else if (service.caution?.status === 'recu') {
+      service.status = 'actif';
+      service.dateValidation = new Date();
+    } else {
+      service.status = 'en_attente_caution';
+    }
+
+    await service.save();
+
+    // Générer l'attestation si le service est actif
+    if (service.status === 'actif') {
+      try {
+        const { generateAndUploadServiceAttestation, generateAndUploadEcocontributionAttestation } = require('../services/pdfService');
+        const attestationResult = await generateAndUploadServiceAttestation(service);
+        service.attestationKey = attestationResult.key;
+        service.attestationUrl = attestationResult.url;
+        
+        // Si c'est un service UNAF avec écocontribution, générer l'attestation écocontribution
+        if (service.typeService === 'assurance_unaf' && service.unafData?.options?.ecocontribution?.souscrit) {
+          try {
+            const ecoResult = await generateAndUploadEcocontributionAttestation(service);
+            service.ecocontributionAttestationKey = ecoResult.key;
+            service.ecocontributionAttestationUrl = ecoResult.url;
+            console.log('Attestation écocontribution générée:', ecoResult.fileName);
+          } catch (ecoError) {
+            console.error('Erreur génération attestation écocontribution:', ecoError);
+          }
+        }
+        
+        await service.save();
+      } catch (attestationError) {
+        console.error('Erreur génération attestation service:', attestationError);
+      }
     }
   }
 
