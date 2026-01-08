@@ -381,6 +381,7 @@ const activateExport = asyncHandler(async (req, res) => {
           const TARIFS = {
             affairesJuridiques: 0.15,
             ecocontribution: 0.12,
+            revue: { papier: 31, numerique: 18, papier_numerique: 35, aucun: 0 },
             assurance: { formule1: 0.10, formule2: 1.65, formule3: 2.80 },
           };
           
@@ -392,6 +393,10 @@ const activateExport = asyncHandler(async (req, res) => {
             service.unafData.detailMontants.assurance = TARIFS.assurance[mods.formuleApres] * nombreRuches;
           }
           if (mods.revueApres && mods.revueApres !== mods.revueAvant) {
+            // Initialiser l'objet revue s'il n'existe pas
+            if (!service.unafData.options.revue) {
+              service.unafData.options.revue = {};
+            }
             service.unafData.options.revue.choix = mods.revueApres;
             service.unafData.options.revue.montant = TARIFS.revue[mods.revueApres] || 0;
             service.unafData.detailMontants.revue = TARIFS.revue[mods.revueApres] || 0;
