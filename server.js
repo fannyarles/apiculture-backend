@@ -88,8 +88,8 @@ app.use('/dev', require('./routes/devRoutes'));
 console.log('✅ /dev');
 app.use('/migration', require('./routes/migrationRoutes'));
 console.log('✅ /migration');
-app.use('/regularisations', require('./routes/regularisationRoutes'));
-console.log('✅ /regularisations');
+// app.use('/regularisations', require('./routes/regularisationRoutes'));
+// console.log('✅ /regularisations');
 
 // Servir les fichiers statiques pour les uploads
 app.use('/uploads', express.static('uploads'));
