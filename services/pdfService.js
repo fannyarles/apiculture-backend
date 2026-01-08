@@ -286,11 +286,16 @@ const generateAttestationPDF = async (adhesion) => {
          .fillColor('#000000')
          .text(`ATTESTATION D'ADHÉSION ${adhesion.annee}`, textX, logoY + 40, { width: textWidth, align: 'left' });
       
-      // Validité - varie selon l'existence d'une adhésion N-1
+      // Validité - varie selon l'existence d'une adhésion N-1 ou si c'est une adhésion anticipée
       let validiteText;
-      if (previousYearAdhesion) {
+      const currentYear = new Date().getFullYear();
+      const isAdhesionAnticipee = adhesion.annee > currentYear;
+      
+      if (isAdhesionAnticipee || previousYearAdhesion) {
+        // Adhésion anticipée OU adhérent avec adhésion N-1 : validité toute l'année
         validiteText = `Validité de l'adhésion du 01 janvier au 31 décembre ${adhesion.annee}`;
       } else {
+        // Nouvel adhérent sans adhésion N-1 : validité depuis la date de paiement
         const datePaiement = adhesion.paiement?.datePaiement ? new Date(adhesion.paiement.datePaiement).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long' }) : new Date(adhesion.dateValidation || adhesion.createdAt).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long' });
         validiteText = `Validité de l'adhésion du ${datePaiement} au 31 décembre ${adhesion.annee}`;
       }
@@ -594,11 +599,16 @@ const generateBulletinAdhesionPDF = async (adhesion) => {
          .fillColor('#000000')
          .text(`BULLETIN D'ADHÉSION ${adhesion.annee}`, textX, logoY + 40, { width: textWidth, align: 'left' });
       
-      // Validité - varie selon l'existence d'une adhésion N-1
+      // Validité - varie selon l'existence d'une adhésion N-1 ou si c'est une adhésion anticipée
       let validiteText;
-      if (previousYearAdhesion) {
+      const currentYear = new Date().getFullYear();
+      const isAdhesionAnticipee = adhesion.annee > currentYear;
+      
+      if (isAdhesionAnticipee || previousYearAdhesion) {
+        // Adhésion anticipée OU adhérent avec adhésion N-1 : validité toute l'année
         validiteText = `Validité de l'adhésion du 01 janvier au 31 décembre ${adhesion.annee}`;
       } else {
+        // Nouvel adhérent sans adhésion N-1 : validité depuis la date de paiement
         const datePaiement = adhesion.paiement?.datePaiement ? new Date(adhesion.paiement.datePaiement).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long' }) : new Date(adhesion.dateValidation || adhesion.createdAt).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long' });
         validiteText = `Validité de l'adhésion du ${datePaiement} au 31 décembre ${adhesion.annee}`;
       }
