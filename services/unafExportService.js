@@ -122,36 +122,45 @@ const getUnexportedPayments = async (annee) => {
   for (const service of servicesWithModifications) {
     service.historiqueModifications.forEach((modif, index) => {
       if (modif.paiement?.status === 'paye' && !modif.exportedToUNAF) {
-        // Pour les modifications, construire les options avec les NOUVELLES valeurs
-        // (celles que l'adhérent aura après validation)
+        // Pour les modifications, ne construire que les options MODIFIÉES
         const currentOptions = service.unafData?.options || {};
         const mods = modif.modifications || {};
         
-        // Construire les options en appliquant les modifications
-        const optionsDeMod = {
-          revue: {
-            choix: mods.revueApres || currentOptions.revue?.choix,
-          },
-          assurance: {
-            formule: mods.formuleApres || currentOptions.assurance?.formule,
-          },
-          affairesJuridiques: {
-            souscrit: mods.affairesJuridiquesApres !== undefined 
-              ? mods.affairesJuridiquesApres 
-              : currentOptions.affairesJuridiques?.souscrit,
-          },
-          ecocontribution: {
-            souscrit: mods.ecocontributionApres !== undefined 
-              ? mods.ecocontributionApres 
-              : currentOptions.ecocontribution?.souscrit,
-          },
-        };
+        // Construire uniquement les options qui ont changé
+        const optionsModifiees = {};
         
-        // Si écocontribution est ajoutée, utiliser le SIRET de la modification ou unafData pour la modification
-        // Si pas d'écocontribution, ne pas transmettre le SIRET
+        // Revue : seulement si ajoutée (passage de 'aucun' à une option)
+        if (mods.revueApres && mods.revueApres !== mods.revueAvant && mods.revueApres !== 'aucun') {
+          optionsModifiees.revue = {
+            choix: mods.revueApres,
+          };
+        }
+        
+        // Assurance : seulement si upgrade de formule
+        if (mods.formuleApres && mods.formuleApres !== mods.formuleAvant) {
+          optionsModifiees.assurance = {
+            formule: mods.formuleApres,
+          };
+        }
+        
+        // Affaires juridiques : seulement si ajoutée
+        if (mods.affairesJuridiquesApres === true && mods.affairesJuridiquesAvant === false) {
+          optionsModifiees.affairesJuridiques = {
+            souscrit: true,
+          };
+        }
+        
+        // Écocontribution : seulement si ajoutée
+        if (mods.ecocontributionApres === true && mods.ecocontributionAvant === false) {
+          optionsModifiees.ecocontribution = {
+            souscrit: true,
+          };
+        }
+        
+        // SIRET : uniquement si écocontribution est ajoutée dans cette modification
         const unafDataForExport = {
           ...service.unafData,
-          siret: mods.ecocontributionApres === true && mods.siret 
+          siret: (mods.ecocontributionApres === true && mods.ecocontributionAvant === false && mods.siret)
             ? mods.siret || service.unafData?.siret 
             : '',
           napi: mods.napi || service.unafData?.napi || '',
@@ -166,8 +175,8 @@ const getUnexportedPayments = async (annee) => {
           montant: modif.montantSupplementaire,
           datePaiement: modif.paiement.datePaiement,
           modifications: modif.modifications,
-          // Utiliser les options APRÈS modification pour l'export
-          options: optionsDeMod,
+          // Utiliser uniquement les options modifiées pour l'export
+          options: optionsModifiees,
           informations: service.informationsPersonnelles,
           unafData: unafDataForExport,
         });
