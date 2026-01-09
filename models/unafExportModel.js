@@ -69,6 +69,10 @@ const unafExportSchema = mongoose.Schema(
       enum: ['genere', 'envoye', 'erreur'],
       default: 'genere',
     },
+    // Date d'activation des adhésions
+    dateActivation: {
+      type: Date,
+    },
     // Notes ou erreurs
     notes: {
       type: String,
