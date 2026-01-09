@@ -219,8 +219,6 @@ const notifyAdminsServicePayment = async (service) => {
           ${service.typeService === 'assurance_unaf' ? `<p style="margin: 5px 0;"><strong>Nombre de ruches :</strong> ${service.unafData?.nombreRuches || 'N/A'}</p>` : ''}
         </div>
         
-        <p>Le service est maintenant <strong style="color: #16A34A;">actif</strong>.</p>
-        
         <hr style="border: none; border-top: 1px solid #E5E7EB; margin: 30px 0;">
         
         <p style="color: #6B7280; font-size: 12px;">
