@@ -5,6 +5,47 @@ const Adhesion = require('../models/adhesionModel');
 const Preference = require('../models/preferenceModel');
 const { envoyerCommunication } = require('../services/emailService');
 
+// @desc    Prévisualiser les destinataires d'une communication
+// @route   POST /api/communications/preview-destinataires
+// @access  Private/Admin
+const previewDestinataires = asyncHandler(async (req, res) => {
+  const { estSanitaire, criteresDestinataires } = req.body;
+
+  // Créer un objet communication temporaire pour utiliser getDestinataires
+  const tempCommunication = {
+    estSanitaire,
+    criteresDestinataires: criteresDestinataires || [],
+    organisme: req.user.organisme,
+  };
+
+  const destinataires = await getDestinataires(tempCommunication);
+  
+  // Grouper les destinataires par organisme pour les statistiques
+  const statsParOrganisme = {};
+  for (const user of destinataires) {
+    const userOrganismes = user.organismes || (user.organisme ? [user.organisme] : []);
+    for (const org of userOrganismes) {
+      if (!statsParOrganisme[org]) {
+        statsParOrganisme[org] = 0;
+      }
+      statsParOrganisme[org]++;
+    }
+  }
+
+  res.json({
+    nombreTotal: destinataires.length,
+    statsParOrganisme,
+    destinataires: destinataires.map(u => ({
+      _id: u._id,
+      nom: u.nom,
+      prenom: u.prenom,
+      email: u.email,
+      organisme: u.organisme,
+      organismes: u.organismes
+    }))
+  });
+});
+
 // @desc    Obtenir les statistiques de destinataires disponibles
 // @route   GET /api/communications/destinataires-stats
 // @access  Private/Admin
@@ -271,8 +312,10 @@ const getCommunicationById = asyncHandler(async (req, res) => {
   }
 
   // Calculer le nombre de destinataires
+  console.log('Calcul des destinataires pour communication:', communication._id);
   const destinataires = await getDestinataires(communication);
   const nombreDestinataires = destinataires.length;
+  console.log('Nombre de destinataires calculé:', nombreDestinataires);
 
   res.json({
     ...communication.toObject(),
@@ -406,6 +449,7 @@ const sendCommunication = asyncHandler(async (req, res) => {
 });
 
 module.exports = {
+  previewDestinataires,
   getDestinataireStats,
   createCommunication,
   getCommunications,
