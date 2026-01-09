@@ -151,6 +151,16 @@ const getUnexportedPayments = async (annee) => {
           },
         };
         
+        // Construire unafData pour la modification
+        // Si écocontribution est ajoutée, utiliser le SIRET de la modification
+        const unafDataForExport = {
+          ...service.unafData,
+          siret: mods.ecocontributionApres === true && mods.siret 
+            ? mods.siret 
+            : service.unafData?.siret || '',
+          napi: mods.napi || service.unafData?.napi || '',
+        };
+        
         payments.push({
           type: 'modification',
           serviceId: service._id,
@@ -163,7 +173,7 @@ const getUnexportedPayments = async (annee) => {
           // Utiliser les options APRÈS modification pour l'export
           options: optionsApresModif,
           informations: service.informationsPersonnelles,
-          unafData: service.unafData,
+          unafData: unafDataForExport,
         });
       }
     });
