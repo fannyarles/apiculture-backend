@@ -225,6 +225,7 @@ const createCommunication = asyncHandler(async (req, res) => {
     contenu,
     estSanitaire,
     destinataires,
+    criteresDestinataires,
     statut,
     dateProgrammee
   } = req.body;
@@ -246,6 +247,7 @@ const createCommunication = asyncHandler(async (req, res) => {
     auteur: req.user._id,
     organisme: req.user.organisme,
     estSanitaire: estSanitaire || false,
+    criteresDestinataires: criteresDestinataires || [],
     destinataires: destinataires || 'mon_groupement',
     statut: statut || 'brouillon',
     dateProgrammee: statut === 'programme' ? dateProgrammee : undefined
