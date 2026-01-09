@@ -176,6 +176,9 @@ const getUserProfile = asyncHandler(async (req, res) => {
       telephoneMobile: user.telephoneMobile,
       adresse: user.adresse,
       dateNaissance: user.dateNaissance,
+      napi: user.napi,
+      numeroAmexa: user.numeroAmexa,
+      siret: user.siret,
       role: user.role,
       roles: user.roles,
       organisme: user.organisme,
@@ -185,6 +188,7 @@ const getUserProfile = asyncHandler(async (req, res) => {
       // Ajouter personalInfo avec mapping pour compatibilité frontend
       personalInfo: {
         type: user.type,
+        typePersonne: user.typePersonne,
         raisonSociale: user.raisonSociale,
         designation: user.designation,
         prenom: user.prenom,

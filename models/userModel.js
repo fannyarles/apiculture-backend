@@ -56,6 +56,19 @@ const userSchema = mongoose.Schema(
       type: Date,
       required: false,
     },
+    // Informations apicoles
+    napi: {
+      type: String,
+      required: false,
+    },
+    numeroAmexa: {
+      type: String,
+      required: false,
+    },
+    siret: {
+      type: String,
+      required: false,
+    },
     role: {
       type: String,
       enum: ['user', 'admin', 'super_admin'],
