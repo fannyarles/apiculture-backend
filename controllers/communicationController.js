@@ -77,17 +77,25 @@ const getDestinataires = async (communication) => {
   let destinataires = [];
 
   if (communication.estSanitaire) {
-    // Intérêt général : tous les adhérents actifs qui acceptent les alertes sanitaires
-    const currentYear = new Date().getFullYear();
-    const adhesionsActives = await Adhesion.find({
-      annee: currentYear,
-      status: 'actif'
+    // Intérêt général : tous les adhérents avec au moins une adhésion actif ou expiree
+    const adhesions = await Adhesion.find({
+      status: { $in: ['actif', 'expiree'] }
     }).populate('user');
 
-    const adherentsActifs = adhesionsActives.map(adh => adh.user).filter(user => user);
+    // Utiliser un Set pour éviter les doublons (un utilisateur peut avoir plusieurs adhésions)
+    const userIds = new Set();
+    const usersMap = new Map();
     
-    for (const user of adherentsActifs) {
-      const prefs = await Preference.findOne({ user: user._id });
+    for (const adhesion of adhesions) {
+      if (adhesion.user && !userIds.has(adhesion.user._id.toString())) {
+        userIds.add(adhesion.user._id.toString());
+        usersMap.set(adhesion.user._id.toString(), adhesion.user);
+      }
+    }
+    
+    // Vérifier les préférences de communication
+    for (const [userId, user] of usersMap) {
+      const prefs = await Preference.findOne({ user: userId });
       if (prefs?.communications?.alertesSanitaires) {
         destinataires.push(user);
       }
@@ -262,7 +270,14 @@ const getCommunicationById = asyncHandler(async (req, res) => {
     throw new Error('Accès non autorisé à cette communication');
   }
 
-  res.json(communication);
+  // Calculer le nombre de destinataires
+  const destinataires = await getDestinataires(communication);
+  const nombreDestinataires = destinataires.length;
+
+  res.json({
+    ...communication.toObject(),
+    nombreDestinataires
+  });
 });
 
 // @desc    Mettre à jour une communication (brouillons uniquement)
