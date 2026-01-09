@@ -128,31 +128,27 @@ const getUnexportedPayments = async (annee) => {
         const mods = modif.modifications || {};
         
         // Construire les options en appliquant les modifications
-        const optionsApresModif = {
+        const optionsDeMod = {
           revue: {
-            ...currentOptions.revue,
             choix: mods.revueApres || currentOptions.revue?.choix,
           },
           assurance: {
-            ...currentOptions.assurance,
             formule: mods.formuleApres || currentOptions.assurance?.formule,
           },
           affairesJuridiques: {
-            ...currentOptions.affairesJuridiques,
             souscrit: mods.affairesJuridiquesApres !== undefined 
               ? mods.affairesJuridiquesApres 
               : currentOptions.affairesJuridiques?.souscrit,
           },
           ecocontribution: {
-            ...currentOptions.ecocontribution,
             souscrit: mods.ecocontributionApres !== undefined 
               ? mods.ecocontributionApres 
               : currentOptions.ecocontribution?.souscrit,
           },
         };
         
-        // Construire unafData pour la modification
-        // Si écocontribution est ajoutée, utiliser le SIRET de la modification
+        // Si écocontribution est ajoutée, utiliser le SIRET de la modification ou unafData pour la modification
+        // Si pas d'écocontribution, ne pas transmettre le SIRET
         const unafDataForExport = {
           ...service.unafData,
           siret: mods.ecocontributionApres === true && mods.siret 
@@ -171,7 +167,7 @@ const getUnexportedPayments = async (annee) => {
           datePaiement: modif.paiement.datePaiement,
           modifications: modif.modifications,
           // Utiliser les options APRÈS modification pour l'export
-          options: optionsApresModif,
+          options: optionsDeMod,
           informations: service.informationsPersonnelles,
           unafData: unafDataForExport,
         });
