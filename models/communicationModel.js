@@ -45,7 +45,7 @@ const communicationSchema = mongoose.Schema(
       statut: {
         type: String,
         required: true,
-        enum: ['actif', 'expire'],
+        enum: ['actif', 'expiree'],
       }
     }],
     // Ancien champ destinataires gardé pour compatibilité
