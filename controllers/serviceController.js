@@ -684,6 +684,9 @@ const modifyUNAFSubscription = asyncHandler(async (req, res) => {
     ecocontributionApres: currentOptions.ecocontribution?.souscrit || false,
   };
 
+  modifications.siret ? modificationsEffectuees.siret = modifications?.siret : null;
+  modifications.napi ? modificationsEffectuees.napi = modifications?.napi : null;
+
   // Calculer différence formule assurance
   if (modifications.assuranceFormule && modifications.assuranceFormule !== currentOptions.assurance?.formule) {
     const ancienPrix = TARIFS.assurance[currentOptions.assurance?.formule] || 0;
@@ -708,10 +711,6 @@ const modifyUNAFSubscription = asyncHandler(async (req, res) => {
   if (modifications.ecocontribution === true && !currentOptions.ecocontribution?.souscrit) {
     montantSupplementaire += TARIFS.ecocontribution * nombreRuches;
     modificationsEffectuees.ecocontributionApres = true;
-    // Stocker le SIRET si écocontribution est ajoutée
-    if (modifications.siret) {
-      modificationsEffectuees.siret = modifications.siret;
-    }
   }
   
   // Stocker le NAPI s'il est fourni
