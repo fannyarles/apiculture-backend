@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const {
+  getDestinataireStats,
   createCommunication,
   getCommunications,
   getCommunicationById,
@@ -12,6 +13,9 @@ const { protect, admin } = require('../middleware/authMiddleware');
 
 // Toutes les routes nécessitent d'être admin
 router.use(protect, admin);
+
+// Route pour obtenir les stats de destinataires
+router.get('/destinataires-stats', getDestinataireStats);
 
 router.route('/')
   .get(getCommunications)

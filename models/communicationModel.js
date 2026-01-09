@@ -31,11 +31,27 @@ const communicationSchema = mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    // Nouveau système de sélection des destinataires
+    criteresDestinataires: [{
+      organisme: {
+        type: String,
+        required: true,
+        enum: ['SAR', 'AMAIR'],
+      },
+      annee: {
+        type: Number,
+        required: true,
+      },
+      statut: {
+        type: String,
+        required: true,
+        enum: ['actif', 'expire'],
+      }
+    }],
+    // Ancien champ destinataires gardé pour compatibilité
     destinataires: {
       type: String,
-      required: true,
       enum: ['mon_groupement', 'tous_groupements', 'SAR', 'AMAIR'],
-      default: 'mon_groupement',
     },
     dateEnvoi: {
       type: Date,

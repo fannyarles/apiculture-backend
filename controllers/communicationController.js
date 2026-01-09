@@ -5,64 +5,160 @@ const Adhesion = require('../models/adhesionModel');
 const Preference = require('../models/preferenceModel');
 const { envoyerCommunication } = require('../services/emailService');
 
+// @desc    Obtenir les statistiques de destinataires disponibles
+// @route   GET /api/communications/destinataires-stats
+// @access  Private/Admin
+const getDestinataireStats = asyncHandler(async (req, res) => {
+  const userOrganismes = req.user.organismes || (req.user.organisme ? [req.user.organisme] : []);
+  
+  if (userOrganismes.length === 0) {
+    res.status(400);
+    throw new Error('Aucun organisme associé à votre compte');
+  }
+
+  const stats = [];
+
+  // Pour chaque organisme de l'admin
+  for (const organisme of userOrganismes) {
+    // Récupérer toutes les années où il y a des adhésions pour cet organisme
+    const adhesions = await Adhesion.find({ organisme }).select('annee status').lean();
+    
+    // Grouper par année et statut
+    const groupedByYear = {};
+    
+    for (const adhesion of adhesions) {
+      const year = adhesion.annee;
+      const status = adhesion.status;
+      
+      if (!groupedByYear[year]) {
+        groupedByYear[year] = { actif: 0, expire: 0 };
+      }
+      
+      if (status === 'actif') {
+        groupedByYear[year].actif++;
+      } else if (status === 'expire') {
+        groupedByYear[year].expire++;
+      }
+    }
+    
+    // Construire les stats pour cet organisme
+    for (const [annee, counts] of Object.entries(groupedByYear)) {
+      if (counts.actif > 0) {
+        stats.push({
+          organisme,
+          annee: parseInt(annee),
+          statut: 'actif',
+          count: counts.actif
+        });
+      }
+      if (counts.expire > 0) {
+        stats.push({
+          organisme,
+          annee: parseInt(annee),
+          statut: 'expire',
+          count: counts.expire
+        });
+      }
+    }
+  }
+
+  // Trier par organisme, puis année décroissante, puis statut
+  stats.sort((a, b) => {
+    if (a.organisme !== b.organisme) return a.organisme.localeCompare(b.organisme);
+    if (a.annee !== b.annee) return b.annee - a.annee;
+    return a.statut.localeCompare(b.statut);
+  });
+
+  res.json(stats);
+});
+
 // @desc    Obtenir les destinataires d'une communication
 const getDestinataires = async (communication) => {
-  const currentYear = new Date().getFullYear();
-
-  // Récupérer tous les adhérents actifs de l'année en cours
-  const adhesionsActives = await Adhesion.find({
-    annee: currentYear,
-    status: 'actif'
-  }).populate('user');
-
-  const adherentsActifs = adhesionsActives.map(adh => adh.user).filter(user => user);
-
   let destinataires = [];
 
   if (communication.estSanitaire) {
-    // Intérêt général : tous les adhérents qui acceptent les alertes sanitaires
+    // Intérêt général : tous les adhérents actifs qui acceptent les alertes sanitaires
+    const currentYear = new Date().getFullYear();
+    const adhesionsActives = await Adhesion.find({
+      annee: currentYear,
+      status: 'actif'
+    }).populate('user');
+
+    const adherentsActifs = adhesionsActives.map(adh => adh.user).filter(user => user);
+    
     for (const user of adherentsActifs) {
       const prefs = await Preference.findOne({ user: user._id });
       if (prefs?.communications?.alertesSanitaires) {
         destinataires.push(user);
       }
     }
-  } else if (communication.destinataires === 'SAR' || communication.destinataires === 'AMAIR') {
-    // Nouveau format : Communication pour un organisme spécifique
-    const targetOrganisme = communication.destinataires;
-    for (const user of adherentsActifs) {
-      const userOrganismes = user.organismes || (user.organisme ? [user.organisme] : []);
-      if (userOrganismes.includes(targetOrganisme)) {
-        const prefs = await Preference.findOne({ user: user._id });
-        if (prefs?.communications?.mesGroupements) {
-          destinataires.push(user);
-        }
-      }
-    }
-  } else if (communication.destinataires === 'mon_groupement') {
-    // Ancien format : Communication pour le groupement de l'auteur uniquement
-    for (const user of adherentsActifs) {
-      if (user.organisme === communication.organisme) {
-        const prefs = await Preference.findOne({ user: user._id });
-        if (prefs?.communications?.mesGroupements) {
-          destinataires.push(user);
-        }
-      }
-    }
-  } else if (communication.destinataires === 'tous_groupements') {
-    // Communication pour tous les groupements
-    for (const user of adherentsActifs) {
-      const prefs = await Preference.findOne({ user: user._id });
+  } else if (communication.criteresDestinataires && communication.criteresDestinataires.length > 0) {
+    // Nouveau système avec critères multiples (organisme, année, statut)
+    const userIds = new Set();
+    
+    for (const critere of communication.criteresDestinataires) {
+      const { organisme, annee, statut } = critere;
       
-      if (user.organisme === communication.organisme) {
-        // Adhérents du même groupement
-        if (prefs?.communications?.mesGroupements) {
-          destinataires.push(user);
+      // Récupérer les adhésions correspondant aux critères
+      const adhesions = await Adhesion.find({
+        organisme,
+        annee,
+        status: statut
+      }).populate('user');
+      
+      // Ajouter les utilisateurs en vérifiant leurs préférences
+      for (const adhesion of adhesions) {
+        if (adhesion.user && !userIds.has(adhesion.user._id.toString())) {
+          const prefs = await Preference.findOne({ user: adhesion.user._id });
+          if (prefs?.communications?.mesGroupements) {
+            destinataires.push(adhesion.user);
+            userIds.add(adhesion.user._id.toString());
+          }
         }
-      } else {
-        // Adhérents des autres groupements
-        if (prefs?.communications?.autresGroupements) {
-          destinataires.push(user);
+      }
+    }
+  } else if (communication.destinataires) {
+    // Ancien système pour compatibilité
+    const currentYear = new Date().getFullYear();
+    const adhesionsActives = await Adhesion.find({
+      annee: currentYear,
+      status: 'actif'
+    }).populate('user');
+
+    const adherentsActifs = adhesionsActives.map(adh => adh.user).filter(user => user);
+
+    if (communication.destinataires === 'SAR' || communication.destinataires === 'AMAIR') {
+      const targetOrganisme = communication.destinataires;
+      for (const user of adherentsActifs) {
+        const userOrganismes = user.organismes || (user.organisme ? [user.organisme] : []);
+        if (userOrganismes.includes(targetOrganisme)) {
+          const prefs = await Preference.findOne({ user: user._id });
+          if (prefs?.communications?.mesGroupements) {
+            destinataires.push(user);
+          }
+        }
+      }
+    } else if (communication.destinataires === 'mon_groupement') {
+      for (const user of adherentsActifs) {
+        if (user.organisme === communication.organisme) {
+          const prefs = await Preference.findOne({ user: user._id });
+          if (prefs?.communications?.mesGroupements) {
+            destinataires.push(user);
+          }
+        }
+      }
+    } else if (communication.destinataires === 'tous_groupements') {
+      for (const user of adherentsActifs) {
+        const prefs = await Preference.findOne({ user: user._id });
+        
+        if (user.organisme === communication.organisme) {
+          if (prefs?.communications?.mesGroupements) {
+            destinataires.push(user);
+          }
+        } else {
+          if (prefs?.communications?.autresGroupements) {
+            destinataires.push(user);
+          }
         }
       }
     }
@@ -295,6 +391,7 @@ const sendCommunication = asyncHandler(async (req, res) => {
 });
 
 module.exports = {
+  getDestinataireStats,
   createCommunication,
   getCommunications,
   getCommunicationById,
