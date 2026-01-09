@@ -241,11 +241,23 @@ const createCommunication = asyncHandler(async (req, res) => {
     throw new Error('La date programmée est requise pour un envoi programmé');
   }
 
+  // Déterminer l'organisme : utiliser req.user.organisme ou le premier de organismes[] ou le premier critère
+  let organismeToUse = req.user.organisme;
+  if (!organismeToUse && req.user.organismes && req.user.organismes.length > 0) {
+    organismeToUse = req.user.organismes[0];
+  }
+  if (!organismeToUse && criteresDestinataires && criteresDestinataires.length > 0) {
+    organismeToUse = criteresDestinataires[0].organisme;
+  }
+  if (!organismeToUse) {
+    organismeToUse = 'SAR'; // Valeur par défaut
+  }
+
   const communication = await Communication.create({
     titre,
     contenu,
     auteur: req.user._id,
-    organisme: req.user.organisme,
+    organisme: organismeToUse,
     estSanitaire: estSanitaire || false,
     criteresDestinataires: criteresDestinataires || [],
     destinataires: destinataires || 'mon_groupement',
