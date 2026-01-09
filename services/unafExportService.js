@@ -270,14 +270,16 @@ const generateSingleExcelFile = async (payments, annee, exportDate, isComplement
   );
 
   // Générer le nom de fichier selon la nomenclature
+  const folder = 'unaf-exports';
   const fileName = generateFileName(annee, exportDate, isComplement);
   
   // Upload vers S3
-  const s3Key = `unaf-exports/${fileName}`;
+  const s3Key = `${fileName}`;
   const uploadResult = await uploadFile(
     buffer,
-    s3Key,
-    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    fileName,
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    folder
   );
 
   return {
