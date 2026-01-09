@@ -595,7 +595,7 @@ const canSubscribeUNAF = asyncHandler(async (req, res) => {
 const modifyUNAFSubscription = asyncHandler(async (req, res) => {
   const { serviceId } = req.params;
   const { modifications, signature } = req.body;
-
+  console.log(modifications)
   // Récupérer le service existant
   const service = await Service.findById(serviceId);
 
@@ -684,9 +684,6 @@ const modifyUNAFSubscription = asyncHandler(async (req, res) => {
     ecocontributionApres: currentOptions.ecocontribution?.souscrit || false,
   };
 
-  modifications.siret ? modificationsEffectuees.siret = modifications?.siret : null;
-  modifications.napi ? modificationsEffectuees.napi = modifications?.napi : null;
-
   // Calculer différence formule assurance
   if (modifications.assuranceFormule && modifications.assuranceFormule !== currentOptions.assurance?.formule) {
     const ancienPrix = TARIFS.assurance[currentOptions.assurance?.formule] || 0;
@@ -749,6 +746,10 @@ const modifyUNAFSubscription = asyncHandler(async (req, res) => {
     service.historiqueModifications = [];
   }
   service.historiqueModifications.push(historiqueEntry);
+
+  modifications.siret ? service.unafData.siret = modifications?.siret : null;
+  modifications.napi ? service.unafData.napi = modifications?.napi : null;
+
   await service.save();
 
   // Retourner les infos pour le paiement
