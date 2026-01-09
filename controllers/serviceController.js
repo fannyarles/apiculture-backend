@@ -106,6 +106,12 @@ const createService = asyncHandler(async (req, res) => {
     montant = cotisationUNAF + affairesJuridiques + ecocontribution + revueMontant + assuranceMontant;
     montant = Math.round(montant * 100) / 100; // Arrondir à 2 décimales
 
+    // Vérifier le montant minimum Stripe (0,50€)
+    if (montant < 0.50) {
+      res.status(400);
+      throw new Error(`Le montant total (${montant.toFixed(2)}€) est inférieur au minimum requis de 0,50€ pour le paiement en ligne. Veuillez ajouter d'autres options ou augmenter le nombre de ruches.`);
+    }
+
     const optionsData = {
       cotisationUNAF: { montant: cotisationUNAF },
       affairesJuridiques: {
@@ -130,7 +136,8 @@ const createService = asyncHandler(async (req, res) => {
     };
 
     unafData = {
-      siret: unafOptions.siret || adhesion.siret,
+      // SIRET uniquement si écocontribution est active
+      siret: unafOptions.ecocontribution ? (unafOptions.siret || adhesion.siret || '') : '',
       napi: unafOptions.napi || '',
       nombreEmplacements: unafOptions.nombreEmplacements || adhesion.nombreRuchers,
       nombreRuches: nombreRuches,
@@ -701,6 +708,15 @@ const modifyUNAFSubscription = asyncHandler(async (req, res) => {
   if (modifications.ecocontribution === true && !currentOptions.ecocontribution?.souscrit) {
     montantSupplementaire += TARIFS.ecocontribution * nombreRuches;
     modificationsEffectuees.ecocontributionApres = true;
+    // Stocker le SIRET si écocontribution est ajoutée
+    if (modifications.siret) {
+      modificationsEffectuees.siret = modifications.siret;
+    }
+  }
+  
+  // Stocker le NAPI s'il est fourni
+  if (modifications.napi) {
+    modificationsEffectuees.napi = modifications.napi;
   }
 
   montantSupplementaire = Math.round(montantSupplementaire * 100) / 100;
@@ -708,6 +724,12 @@ const modifyUNAFSubscription = asyncHandler(async (req, res) => {
   if (montantSupplementaire <= 0) {
     res.status(400);
     throw new Error('Aucune modification à effectuer');
+  }
+
+  // Vérifier le montant minimum Stripe (0,50€)
+  if (montantSupplementaire < 0.50) {
+    res.status(400);
+    throw new Error(`Le montant de la modification (${montantSupplementaire.toFixed(2)}€) est inférieur au minimum requis de 0,50€ pour le paiement en ligne. Veuillez ajouter d'autres options ou contacter l'administration.`);
   }
 
   // Créer l'entrée dans l'historique
@@ -807,6 +829,11 @@ const confirmUNAFModification = asyncHandler(async (req, res) => {
     service.unafData.options.ecocontribution.souscrit = true;
     service.unafData.options.ecocontribution.montant = TARIFS.ecocontribution * nombreRuches;
     service.unafData.detailMontants.ecocontribution = TARIFS.ecocontribution * nombreRuches;
+    
+    // Mettre à jour le SIRET si l'écocontribution est activée
+    if (mods.ecocontributionApres === true && mods.siret) {
+      service.unafData.siret = mods.siret;
+    }
   }
 
   // Recalculer le total

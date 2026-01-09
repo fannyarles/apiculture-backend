@@ -97,10 +97,11 @@ const generateExport = asyncHandler(async (req, res) => {
 });
 
 // @desc    Télécharger un export UNAF
-// @route   GET /api/unaf-export/download/:id
+// @route   GET /api/unaf-export/download/:id?fileType=principal|complement
 // @access  Private/Admin
 const downloadExport = asyncHandler(async (req, res) => {
   const { id } = req.params;
+  const { fileType = 'principal' } = req.query;
 
   const exportRecord = await UNAFExport.findById(id);
 
@@ -109,12 +110,30 @@ const downloadExport = asyncHandler(async (req, res) => {
     throw new Error('Export non trouvé');
   }
 
+  let s3Key, fileName;
+
+  // Déterminer quel fichier télécharger
+  if (fileType === 'complement' && exportRecord.fichierComplement?.s3Key) {
+    s3Key = exportRecord.fichierComplement.s3Key;
+    fileName = exportRecord.fichierComplement.fileName || `UNAF_Complement_${exportRecord.annee}_${exportRecord.dateExport.toISOString().split('T')[0]}.xlsx`;
+  } else if (fileType === 'principal' && exportRecord.fichierPrincipal?.s3Key) {
+    s3Key = exportRecord.fichierPrincipal.s3Key;
+    fileName = exportRecord.fichierPrincipal.fileName || `UNAF_Principal_${exportRecord.annee}_${exportRecord.dateExport.toISOString().split('T')[0]}.xlsx`;
+  } else if (exportRecord.s3Key) {
+    // Fallback pour les anciens exports (compatibilité)
+    s3Key = exportRecord.s3Key;
+    fileName = `UNAF_Export_${exportRecord.annee}_${exportRecord.dateExport.toISOString().split('T')[0]}.xlsx`;
+  } else {
+    res.status(404);
+    throw new Error('Fichier non trouvé pour cet export');
+  }
+
   // Générer une nouvelle URL signée
-  const signedUrl = await getSignedUrl(exportRecord.s3Key, 3600);
+  const signedUrl = await getSignedUrl(s3Key, 3600);
 
   res.json({
     url: signedUrl,
-    fileName: `UNAF_Export_${exportRecord.annee}_${exportRecord.dateExport.toISOString().split('T')[0]}.xlsx`,
+    fileName,
   });
 });
 
