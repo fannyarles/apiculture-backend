@@ -31,13 +31,13 @@ const getDestinataireStats = asyncHandler(async (req, res) => {
       const status = adhesion.status;
       
       if (!groupedByYear[year]) {
-        groupedByYear[year] = { actif: 0, expire: 0 };
+        groupedByYear[year] = { actif: 0, expiree: 0 };
       }
       
       if (status === 'actif') {
         groupedByYear[year].actif++;
-      } else if (status === 'expire') {
-        groupedByYear[year].expire++;
+      } else if (status === 'expiree') {
+        groupedByYear[year].expiree++;
       }
     }
     
@@ -51,12 +51,12 @@ const getDestinataireStats = asyncHandler(async (req, res) => {
           count: counts.actif
         });
       }
-      if (counts.expire > 0) {
+      if (counts.expiree > 0) {
         stats.push({
           organisme,
           annee: parseInt(annee),
-          statut: 'expire',
-          count: counts.expire
+          statut: 'expiree',
+          count: counts.expiree
         });
       }
     }

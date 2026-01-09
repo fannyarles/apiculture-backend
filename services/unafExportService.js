@@ -194,14 +194,14 @@ const getUnexportedPayments = async (annee) => {
  * @param {boolean} isComplement 
  * @returns {string}
  */
-const generateFileName = (annee, exportDate, isComplement = false) => {
+const generateFileName = (annee, exportDate, montantTotal, isComplement = false) => {
   const day = String(exportDate.getDate()).padStart(2, '0');
   const month = String(exportDate.getMonth() + 1).padStart(2, '0');
   const year = String(exportDate.getFullYear()).slice(-2);
   const dateStr = `${day}${month}${year}`;
   
-  const baseName = `SAR_Listingstructure${annee}_export_${dateStr}`;
-  return isComplement ? `${baseName}_complement.xlsx` : `${baseName}.xlsx`;
+  const baseName = `SARpourUNAF_Listingstructure${annee}_export_${dateStr}`;
+  return isComplement ? `${baseName}_Complément_${montantTotal}.xlsx` : `${baseName}_Initiale_${montantTotal}.xlsx`;
 };
 
 /**
@@ -289,7 +289,7 @@ const generateSingleExcelFile = async (payments, annee, exportDate, isComplement
 
   // Générer le nom de fichier selon la nomenclature
   const folder = 'unaf-exports';
-  const fileName = generateFileName(annee, exportDate, isComplement);
+  const fileName = generateFileName(annee, exportDate, montantTotal, isComplement);
   
   // Upload vers S3
   const s3Key = `${fileName}`;
