@@ -160,7 +160,7 @@ const getUnexportedPayments = async (annee) => {
         // SIRET : uniquement si écocontribution est ajoutée dans cette modification
         const unafDataForExport = {
           ...service.unafData,
-          siret: (mods.ecocontributionApres === true && mods.ecocontributionAvant === false && mods.siret)
+          siret: (mods.ecocontributionApres === true && mods.ecocontributionAvant === false && (mods.siret || service.unafData?.siret))
             ? mods.siret || service.unafData?.siret 
             : '',
           napi: mods.napi || service.unafData?.napi || '',
@@ -229,7 +229,7 @@ const prepareRowData = (payment) => {
     info.telephoneMobile || '',                    // K: Téléphone mobile
     unafData.siret || '',                          // L: SIRET
     unafData.nombreRuches || '',                   // M: Nb ruches
-    1,                                              // N: Cotisation individuelle (toujours 1)
+    payment.type === 'initial' ? 1 : 0,            // N: Cotisation individuelle (1 si initial, 0 si modification)
     options.revue?.choix === 'papier' ? 1 : '',              // O: Revue papier
     options.revue?.choix === 'numerique' ? 1 : '',           // P: Revue numérique
     options.revue?.choix === 'papier_numerique' ? 1 : '',    // Q: Revue papier & numérique
