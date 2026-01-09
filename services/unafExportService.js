@@ -156,8 +156,8 @@ const getUnexportedPayments = async (annee) => {
         const unafDataForExport = {
           ...service.unafData,
           siret: mods.ecocontributionApres === true && mods.siret 
-            ? mods.siret 
-            : service.unafData?.siret || '',
+            ? mods.siret || service.unafData?.siret 
+            : '',
           napi: mods.napi || service.unafData?.napi || '',
         };
         
