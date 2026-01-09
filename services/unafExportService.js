@@ -215,6 +215,9 @@ const prepareRowData = (payment) => {
   const options = payment.options || {};
   const adresse = info.adresse || {};
 
+  // SIRET : uniquement si ecocontribution est souscrit
+  const siretToExport = options.ecocontribution?.souscrit ? (unafData.siret || '') : '';
+
   return [
     info.nom || payment.user?.nom || '',           // A: Nom
     info.prenom || payment.user?.prenom || '',     // B: Prénom
@@ -227,7 +230,7 @@ const prepareRowData = (payment) => {
     info.email || payment.user?.email || '',       // I: Email
     info.telephone || '',                          // J: Téléphone
     info.telephoneMobile || '',                    // K: Téléphone mobile
-    unafData.siret || '',                          // L: SIRET
+    siretToExport,                                 // L: SIRET (uniquement si ecocontribution souscrit)
     unafData.nombreRuches || '',                   // M: Nb ruches
     payment.type === 'initial' ? 1 : 0,            // N: Cotisation individuelle (1 si initial, 0 si modification)
     options.revue?.choix === 'papier' ? 1 : '',              // O: Revue papier

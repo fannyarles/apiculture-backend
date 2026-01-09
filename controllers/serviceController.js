@@ -136,8 +136,8 @@ const createService = asyncHandler(async (req, res) => {
     };
 
     unafData = {
-      // SIRET uniquement si écocontribution est active
-      siret: unafOptions.ecocontribution ? (unafOptions.siret || adhesion.siret || '') : '',
+      // Toujours enregistrer le SIRET (sera utilisé dans l'export uniquement si ecocontribution est sélectionné)
+      siret: unafOptions.siret || adhesion.siret || '',
       napi: unafOptions.napi || '',
       nombreEmplacements: unafOptions.nombreEmplacements || adhesion.nombreRuchers,
       nombreRuches: nombreRuches,
